@@ -70,8 +70,19 @@ void printPhysicalDeviceProperties( vk::PhysicalDevice& device )
             << std::endl;
 }
 
+void printDetailedPhysicalDeviceInfo( vk::PhysicalDevice& device ) {
+  vk::PhysicalDeviceMemoryProperties props;
+  device.getMemoryProperties(&props);
 
-int main(void)
+  // Information on device memory
+  std::cout << "== Device Memory ==" << "\n"
+            << "Types : " << props.memoryTypeCount << "\n"
+            << "Heaps : " << props.memoryHeapCount << "\n"
+            << std::endl;
+
+}
+
+int main(int argc, char* argv[])
 {
   try {
     auto instance = createVulkanInstance();
@@ -82,6 +93,23 @@ int main(void)
     // Great we found some devices, let's see what the hardware can do
     std::cout << "Found " << physicalDevices.size() << " physical devices" << std::endl;
     for( auto& p : physicalDevices ) printPhysicalDeviceProperties(p);
+
+    // Device order in the list isn't guaranteed, likely the integrated gpu is first
+    // So why don't we fix that? As we're using the C++ api we can just sort the vector
+    std::sort(physicalDevices.begin(), physicalDevices.end(), [&](auto& a, auto& b) {
+      vk::PhysicalDeviceProperties propsA;
+      a.getProperties(&propsA);
+      vk::PhysicalDeviceProperties propsB;
+      a.getProperties(&propsB);
+      // For now just ensure discrete GPUs are first, then order by support vulkan api version
+      if( propsA.deviceType == vk::PhysicalDeviceType::eDiscreteGpu ) return true;
+      if( propsA.apiVersion > propsB.apiVersion ) return true;
+      return false;
+    });
+
+    // Let's print some further info about a device
+    // The first device should now be the 'best'
+    printDetailedPhysicalDeviceInfo(physicalDevices.front());
   } catch ( std::exception& e) {
     std::cerr << e.what() << std::endl;
     return 1;
