@@ -52,9 +52,7 @@ std::string vulkanAPIVersionToString( uint32_t version ) {
   auto patch = VK_VERSION_PATCH(version);
   return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
 }
-
-void printPhysicalDeviceProperties( vk::PhysicalDevice& device )
-{
+void printPhysicalDeviceProperties( vk::PhysicalDevice& device ) {
   vk::PhysicalDeviceProperties props;
   device.getProperties(&props);
 
@@ -69,7 +67,6 @@ void printPhysicalDeviceProperties( vk::PhysicalDevice& device )
             // physical device sparse properties
             << std::endl;
 }
-
 void printDetailedPhysicalDeviceInfo( vk::PhysicalDevice& device ) {
   vk::PhysicalDeviceMemoryProperties props;
   device.getMemoryProperties(&props);
@@ -81,6 +78,20 @@ void printDetailedPhysicalDeviceInfo( vk::PhysicalDevice& device ) {
             << std::endl;
 
 }
+void printQueueFamilyProperties( std::vector<vk::QueueFamilyProperties>& props ) {
+  std::cout << "== Queue Family Properties ==" << std::endl;
+  auto i = 0u;
+  for( auto& queueFamily : props ) {
+    std::cout << "Queue Family  : " << i++ << "\n"
+              << "Queue Count   : " << queueFamily.queueCount << "\n"
+              << "Graphics      : " << static_cast<bool>(queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) << "\n"
+              << "Compute       : " << static_cast<bool>(queueFamily.queueFlags & vk::QueueFlagBits::eCompute) << "\n"
+              << "Transfer      : " << static_cast<bool>(queueFamily.queueFlags & vk::QueueFlagBits::eTransfer) << "\n"
+              << "Sparse Binding: " << static_cast<bool>(queueFamily.queueFlags & vk::QueueFlagBits::eSparseBinding) << "\n"
+              << std::endl;
+
+  }
+}
 
 int main(int argc, char* argv[])
 {
@@ -89,10 +100,6 @@ int main(int argc, char* argv[])
 
     auto physicalDevices = instance.enumeratePhysicalDevices();
     if( physicalDevices.empty() ) throw std::runtime_error("Failed to enumerate physical devices");
-
-    // Great we found some devices, let's see what the hardware can do
-    std::cout << "Found " << physicalDevices.size() << " physical devices" << std::endl;
-    for( auto& p : physicalDevices ) printPhysicalDeviceProperties(p);
 
     // Device order in the list isn't guaranteed, likely the integrated gpu is first
     // So why don't we fix that? As we're using the C++ api we can just sort the vector
@@ -107,9 +114,19 @@ int main(int argc, char* argv[])
       return false;
     });
 
+    // Great we found some devices, let's see what the hardware can do
+    std::cout << "Found " << physicalDevices.size() << " physical devices (First will be used from here on)" << std::endl;
+    for( auto& p : physicalDevices ) printPhysicalDeviceProperties(p);
+
     // Let's print some further info about a device
     // The first device should now be the 'best'
-    printDetailedPhysicalDeviceInfo(physicalDevices.front());
+    auto physicalDevice = physicalDevices.front();
+    printDetailedPhysicalDeviceInfo(physicalDevice);
+
+    // Find out what queues are available
+    auto queueFamiltyProps = physicalDevice.getQueueFamilyProperties();
+    printQueueFamilyProperties(queueFamiltyProps);
+
   } catch ( std::exception& e) {
     std::cerr << e.what() << std::endl;
     return 1;
