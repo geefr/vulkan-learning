@@ -34,6 +34,42 @@ vk::Instance createVulkanInstance()
   }
   return instance;
 }
+vk::Device createLogicalDevice( vk::PhysicalDevice& physicalDevice, uint32_t queueFamily ) {
+
+  vk::DeviceQueueCreateInfo queueInfo(
+        vk::DeviceQueueCreateFlags(),
+        queueFamily, // Queue family index
+        1, // Number of queues to create
+        nullptr // Priorities of each queue
+        );
+
+  // The features of the physical device
+  vk::PhysicalDeviceFeatures deviceSupportedFeatures;
+  physicalDevice.getFeatures(&deviceSupportedFeatures);
+
+  // The features we require, we get very little without requesting these
+  // As listed page 17
+  // TODO: After creation the enabled features are set in this struct, will want to keep it for later
+  vk::PhysicalDeviceFeatures deviceRequiredFeatures;
+  deviceRequiredFeatures.multiDrawIndirect = deviceSupportedFeatures.multiDrawIndirect;
+  deviceRequiredFeatures.tessellationShader = true;
+  deviceRequiredFeatures.geometryShader = true;
+
+  vk::DeviceCreateInfo info(
+    vk::DeviceCreateFlags(),
+        1, // Queue create info count
+        &queueInfo, // Queue create info structs
+        0, // Enabled layer count
+        nullptr, // Enabled layers
+        0, // Enabled extension count
+        nullptr, // Enabled extensions
+        &deviceRequiredFeatures // Physical device features
+        );
+
+  vk::Device logicalDevice;
+  if( physicalDevice.createDevice(&info, nullptr, &logicalDevice ) != vk::Result::eSuccess ) throw std::runtime_error("Failed to create logical device");
+  return logicalDevice;
+}
 
 std::string physicalDeviceTypeToString( vk::PhysicalDeviceType type ) {
   switch(type)
@@ -124,8 +160,20 @@ int main(int argc, char* argv[])
     printDetailedPhysicalDeviceInfo(physicalDevice);
 
     // Find out what queues are available
-    auto queueFamiltyProps = physicalDevice.getQueueFamilyProperties();
-    printQueueFamilyProperties(queueFamiltyProps);
+    auto queueFamilyProps = physicalDevice.getQueueFamilyProperties();
+    printQueueFamilyProperties(queueFamilyProps);
+
+    // Create a logical device to interact with
+    // To do this we also need to specify how many queues from which families we want to create
+    // In this case just 1 queue from the first family which supports graphics
+    auto queueFamilyGraphics = std::find_if(queueFamilyProps.begin(), queueFamilyProps.end(), [&](auto& p) {
+      if( p.queueFlags & vk::QueueFlagBits::eGraphics ) return true;
+      return false;
+    });
+    if( queueFamilyGraphics == queueFamilyProps.end() ) throw std::runtime_error("Failed to find queue with graphics support");
+
+    auto logicalDevice = createLogicalDevice( physicalDevice, static_cast<uint32_t>(queueFamilyGraphics - queueFamilyProps.begin()) );
+    std::cout << "Created a logical device: " << std::hex << reinterpret_cast<uint64_t>(&logicalDevice) << std::endl;
 
   } catch ( std::exception& e) {
     std::cerr << e.what() << std::endl;
