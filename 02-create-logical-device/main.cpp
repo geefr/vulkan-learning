@@ -1,4 +1,5 @@
 
+// https://github.com/KhronosGroup/Vulkan-Hpp
 #include <vulkan/vulkan.hpp>
 
 #include <iostream>
@@ -176,6 +177,10 @@ int main(int argc, char* argv[])
     auto logicalDevice = createLogicalDevice( physicalDevice, static_cast<uint32_t>(queueFamilyGraphics - queueFamilyProps.begin()) );
     std::cout << "Created a logical device: " << std::hex << reinterpret_cast<uint64_t>(&(logicalDevice.get())) << std::endl;
 
+
+    // Wait for everything to finish before cleanup
+    // Cleanup handled by the smart handles in this case
+    logicalDevice->waitIdle();
   } catch ( std::exception& e) {
     std::cerr << e.what() << std::endl;
     return 1;
