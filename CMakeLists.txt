@@ -9,7 +9,7 @@ endif()
 
 # Compiler/Tool requirements
 set( CMAKE_CXX_STANDARD 17 )
-set( CMAKE_CXX_FLAGS "-Werror=all" )
+set( CMAKE_CXX_FLAGS "-Werror=all -Wno-error=old-style-cast" )
 
 # Package/System requirements
 find_package(Vulkan REQUIRED)
