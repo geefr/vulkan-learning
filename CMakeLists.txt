@@ -15,3 +15,4 @@ set( CMAKE_CXX_FLAGS "-Werror=all -Wno-error=old-style-cast" )
 find_package(Vulkan REQUIRED)
 
 add_subdirectory( 01-initialisation )
+add_subdirectory( 02-create-logical-device )
