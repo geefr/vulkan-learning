@@ -14,11 +14,21 @@ vk::Instance createVulkanInstance()
         VK_API_VERSION_1_0 // absolute minimum vulkan api
         );
 
+#ifdef DEBUG
+  uint32_t enabledLayerCount = 1;
+  const char* const enabledLayerNames[] = {
+    "VK_LAYER_LUNARG_standard_validation",
+  };
+#else
+  uint32_t enabledLayerCount = 0;
+  const char* const* enabledLayerNames = nullptr;
+#endif
+
   vk::InstanceCreateInfo instanceCreateInfo(
         vk::InstanceCreateFlags(),
         &applicationInfo, // Application Info
-        0, // enabledLayerCount - don't need any validation layers right now
-        nullptr, // ppEnabledLayerNames
+        enabledLayerCount, // enabledLayerCount - don't need any validation layers right now
+        enabledLayerNames, // ppEnabledLayerNames
         0, // enabledExtensionCount - don't need any extensions yet. In vulkan these need to be requested on init unlike in gl
         nullptr // ppEnabledExtensionNames
         );
