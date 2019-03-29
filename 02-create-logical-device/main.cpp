@@ -4,7 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 
-vk::Instance createVulkanInstance()
+vk::UniqueInstance createVulkanInstance()
 {
   vk::ApplicationInfo applicationInfo(
         "01-initialisation", // Application Name
@@ -33,18 +33,10 @@ vk::Instance createVulkanInstance()
         nullptr // ppEnabledExtensionNames
         );
 
-  vk::Instance instance;
-  if( vk::createInstance(
-        &instanceCreateInfo, // Creation info
-        nullptr, // Allocator - use the built-in one for now
-        &instance // Output, the created instance
-        // Dispatch loader optional - don't know what it does ;)
-        ) != vk::Result::eSuccess ) {
-    throw std::runtime_error("Failed to create Vulkan instance");
-  }
+  vk::UniqueInstance instance(vk::createInstanceUnique(instanceCreateInfo));
   return instance;
 }
-vk::Device createLogicalDevice( vk::PhysicalDevice& physicalDevice, uint32_t queueFamily ) {
+vk::UniqueDevice createLogicalDevice( vk::PhysicalDevice& physicalDevice, uint32_t queueFamily ) {
 
   vk::DeviceQueueCreateInfo queueInfo(
         vk::DeviceQueueCreateFlags(),
@@ -76,8 +68,7 @@ vk::Device createLogicalDevice( vk::PhysicalDevice& physicalDevice, uint32_t que
         &deviceRequiredFeatures // Physical device features
         );
 
-  vk::Device logicalDevice;
-  if( physicalDevice.createDevice(&info, nullptr, &logicalDevice ) != vk::Result::eSuccess ) throw std::runtime_error("Failed to create logical device");
+  vk::UniqueDevice logicalDevice( physicalDevice.createDeviceUnique(info));
   return logicalDevice;
 }
 
@@ -144,7 +135,7 @@ int main(int argc, char* argv[])
   try {
     auto instance = createVulkanInstance();
 
-    auto physicalDevices = instance.enumeratePhysicalDevices();
+    auto physicalDevices = instance->enumeratePhysicalDevices();
     if( physicalDevices.empty() ) throw std::runtime_error("Failed to enumerate physical devices");
 
     // Device order in the list isn't guaranteed, likely the integrated gpu is first
@@ -183,7 +174,7 @@ int main(int argc, char* argv[])
     if( queueFamilyGraphics == queueFamilyProps.end() ) throw std::runtime_error("Failed to find queue with graphics support");
 
     auto logicalDevice = createLogicalDevice( physicalDevice, static_cast<uint32_t>(queueFamilyGraphics - queueFamilyProps.begin()) );
-    std::cout << "Created a logical device: " << std::hex << reinterpret_cast<uint64_t>(&logicalDevice) << std::endl;
+    std::cout << "Created a logical device: " << std::hex << reinterpret_cast<uint64_t>(&(logicalDevice.get())) << std::endl;
 
   } catch ( std::exception& e) {
     std::cerr << e.what() << std::endl;
