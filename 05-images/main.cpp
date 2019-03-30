@@ -79,7 +79,8 @@ int main(int argc, char* argv[])
     XMapWindow(X11dpy, X11Window);
 
     auto logicalDevice = reg.createLogicalDeviceWithPresentQueueXlib(vk::QueueFlagBits::eGraphics, X11dpy, XVisualIDFromVisual(X11vis));
- //   auto logicalDevice = reg.createLogicalDevice(vk::QueueFlagBits::eGraphics);
+    auto surface = reg.createSurfaceXlib(X11dpy, X11Window);
+    auto swapChain = reg.createSwapChainXlib();
 #else
 # error "Code path not implemented"
 #endif

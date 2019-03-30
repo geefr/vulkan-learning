@@ -20,15 +20,20 @@ void Registrar::tearDown() {
   // be best but might be hard to sort out
   // cleanup order in that case..
   mDevice->waitIdle();
+
+
+  mSwapChain.release();
+  mSurface.release();
   for( auto& p : mCommandPools ) p.release();
   mDevice.release();
   mInstance.release();
+
 }
 
-void Registrar::ensureInstanceExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName) {
+void Registrar::ensureExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName) {
   if( std::find_if(extensions.begin(), extensions.end(), [&](auto& e) {
     return e.extensionName == extensionName;
-  }) == extensions.end()) throw std::runtime_error("Instance extension not supported: " + extensionName);
+  }) == extensions.end()) throw std::runtime_error("Extension not supported: " + extensionName);
 }
 
 vk::Instance& Registrar::createVulkanInstance(std::string appName, uint32_t appVer, uint32_t apiVer) {
@@ -44,9 +49,9 @@ vk::Instance& Registrar::createVulkanInstance(std::string appName, uint32_t appV
   ensureInstanceExtension(supportedExtensions, "TODO");
 #endif
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-  ensureInstanceExtension(supportedExtensions, "VK_KHR_xlib_surface");
   enabledInstanceExtensions.push_back("VK_KHR_surface");
   enabledInstanceExtensions.push_back("VK_KHR_xlib_surface");
+  for( auto& e : enabledInstanceExtensions ) ensureExtension(supportedExtensions, e);
 #endif
 #ifdef VK_USE_PLATFORM_LIB_XCB_KHR
   ensureInstanceExtension(supportedExtensions, "TODO");
@@ -107,6 +112,14 @@ vk::Device& Registrar::createLogicalDevice(vk::QueueFlags qFlags ) {
 
 vk::Device& Registrar::createLogicalDevice() {
   if( mQueueFamIndex > mPhysicalDevices.size() ) throw std::runtime_error("createLogicalDevice: Physical device doesn't support required queue types");
+
+  auto supportedExtensions = mPhysicalDevices.front().enumerateDeviceExtensionProperties();
+  std::vector<const char*> enabledDeviceExtensions;
+#if defined(VK_USE_PLATFORM_WIN32_KHR) || defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_LIB_XCB_KHR)
+  enabledDeviceExtensions.push_back("VK_KHR_swapchain");
+  for( auto& e : enabledDeviceExtensions ) ensureExtension(supportedExtensions, e);
+#endif
+
   float queuePriorities = 1.f;
   vk::DeviceQueueCreateInfo queueInfo(
         vk::DeviceQueueCreateFlags(),
@@ -133,8 +146,8 @@ vk::Device& Registrar::createLogicalDevice() {
         &queueInfo, // Queue create info structs
         0, // Enabled layer count
         nullptr, // Enabled layers
-        0, // Enabled extension count
-        nullptr, // Enabled extensions
+        static_cast<uint32_t>(enabledDeviceExtensions.size()), // Enabled extension count
+        enabledDeviceExtensions.data(), // Enabled extensions
         &deviceRequiredFeatures // Physical device features
         );
 
@@ -255,6 +268,63 @@ vk::SurfaceKHR& Registrar::createSurfaceXlib(Display* dpy, Window window) {
 
   mSurface = mInstance->createXlibSurfaceKHRUnique(info);
   return mSurface.get();
+}
+
+vk::SwapchainKHR& Registrar::createSwapChainXlib() {
+  if( !mPhysicalDevices.front().getSurfaceSupportKHR(mQueueFamIndex, mSurface.get()) ) throw std::runtime_error("createSwapChainXlib: Physical device doesn't support surfaces");
+
+  // Parameters used in swapchain must comply with limits of the surface
+  auto caps = mPhysicalDevices.front().getSurfaceCapabilitiesKHR(mSurface.get());
+
+  // First the number of images (none, double, triple buffered)
+  auto numImages = 3u;
+  while( numImages > caps.maxImageCount ) numImages--;
+  if( numImages != 3u ) std::cerr << "Creating swapchain with " << numImages << " images" << std::endl;
+  if( numImages < caps.minImageCount ) throw std::runtime_error("Unable to create swapchain, invalid num images");
+
+  // Ideally we want full alpha support
+  auto alphaMode = vk::CompositeAlphaFlagBitsKHR::ePostMultiplied; // TODO: Pre or post? can't remember the difference
+  if( !(caps.supportedCompositeAlpha & alphaMode) ) {
+    std::cerr << "Surface doesn't support full alpha, falling back" << std::endl;
+    alphaMode = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+  }
+
+  auto imageUsage = vk::ImageUsageFlags(vk::ImageUsageFlagBits::eColorAttachment);
+  if( !(caps.supportedUsageFlags & imageUsage) ) throw std::runtime_error("Surface doesn't support color attachment");
+
+  // caps.maxImageArrayLayers;
+  // caps.minImageExtent;
+  // caps.currentTransform;
+  // caps.supportedTransforms;
+
+  // Choose a pixel format
+  auto surfaceFormats = mPhysicalDevices.front().getSurfaceFormatsKHR(mSurface.get());
+  // TODO: Just choosing the first one here..
+  auto chosenSurfaceFormat = surfaceFormats.front().format;
+  auto chosenColourSpace = surfaceFormats.front().colorSpace;
+
+  vk::SwapchainCreateInfoKHR info(
+        vk::SwapchainCreateFlagsKHR(),
+        mSurface.get(),
+        numImages, // Num images in the swapchain
+        chosenSurfaceFormat, // Pixel format
+        chosenColourSpace, // Colour space
+        caps.currentExtent, // Size of window
+        1, // Image array layers
+        imageUsage, // Image usage flags
+        vk::SharingMode::eExclusive, 0, nullptr, // Exclusive use by one queue
+        caps.currentTransform, // flip/rotate before presentation
+        alphaMode, // How alpha is mapped
+        vk::PresentModeKHR::eFifo, // vsync (mailbox is vsync or faster, fifo is vsync)
+        true, // Clipped - For cases where part of window doesn't need to be rendered/is offscreen
+        vk::SwapchainKHR() // The old swapchain to delete
+        );
+
+  mSwapChain = mDevice->createSwapchainKHRUnique(info);
+
+  mSwapChainImages = mDevice->getSwapchainImagesKHR(mSwapChain.get());
+
+  return mSwapChain.get();
 }
 
 std::string Registrar::physicalDeviceTypeToString( vk::PhysicalDeviceType type ) {

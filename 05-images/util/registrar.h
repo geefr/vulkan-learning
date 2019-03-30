@@ -24,7 +24,7 @@ public:
 
   void tearDown();
 
-  void ensureInstanceExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName);
+  void ensureExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName);
   vk::Instance& createVulkanInstance(std::string appName, uint32_t appVer, uint32_t apiVer = VK_API_VERSION_1_0);
   vk::Device& createLogicalDevice(vk::QueueFlags qFlags);
   uint32_t findQueue(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags);
@@ -36,6 +36,7 @@ public:
   uint32_t findPresentQueueXlib(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags, Display* dpy, VisualID vid);
   vk::Device& createLogicalDeviceWithPresentQueueXlib(vk::QueueFlags qFlags, Display* dpy, VisualID vid);
   vk::SurfaceKHR& createSurfaceXlib(Display* dpy, Window window);
+  vk::SwapchainKHR& createSwapChainXlib();
 #endif
 #ifdef VK_USE_PLATFORM_LIB_XCB_KHR
 #error "XCB support not implemented"
@@ -91,6 +92,8 @@ private:
   vk::UniqueDevice mDevice;
 #ifdef VK_USE_PLATFORM_XLIB_KHR
   vk::UniqueSurfaceKHR mSurface;
+  vk::UniqueSwapchainKHR mSwapChain;
+  std::vector<vk::Image> mSwapChainImages;
 #endif
   uint32_t mQueueFamIndex = std::numeric_limits<uint32_t>::max();
   std::vector<vk::Queue> mQueues;

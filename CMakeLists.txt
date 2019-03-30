@@ -9,7 +9,7 @@ endif()
 
 # Compiler/Tool requirements
 set( CMAKE_CXX_STANDARD 17 )
-set( CMAKE_CXX_FLAGS "-Werror=all -Wno-error=old-style-cast" )
+set( CMAKE_CXX_FLAGS "-Werror=all -Wno-error=old-style-cast -Wno-error=unused-variable -Wno-error=unused-but-set-variable" )
 if( CMAKE_BUILD_TYPE MATCHES "Debug" )
   add_compile_definitions( DEBUG )
 endif()
