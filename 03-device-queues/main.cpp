@@ -39,11 +39,12 @@ vk::UniqueInstance createVulkanInstance()
 }
 vk::UniqueDevice createLogicalDevice( vk::PhysicalDevice& physicalDevice, uint32_t queueFamily ) {
 
+  float queuePriorities = 1.f;
   vk::DeviceQueueCreateInfo queueInfo(
         vk::DeviceQueueCreateFlags(),
         queueFamily, // Queue family index
         1, // Number of queues to create
-        nullptr // Priorities of each queue
+        &queuePriorities // Priorities of each queue
         );
 
   // The features of the physical device
@@ -72,9 +73,69 @@ vk::UniqueDevice createLogicalDevice( vk::PhysicalDevice& physicalDevice, uint32
   vk::UniqueDevice logicalDevice( physicalDevice.createDeviceUnique(info));
   return logicalDevice;
 }
+vk::UniqueBuffer createBuffer( vk::Device& device, vk::DeviceSize size, vk::BufferUsageFlags usageFlags ) {
+  // Exclusive buffer of size, for usageFlags
+  vk::BufferCreateInfo info(
+        vk::BufferCreateFlags(),
+        size,
+        usageFlags
+        );
+  return device.createBufferUnique(info);
+}
+
+/// Select a device memory heap based on flags (vk::MemoryRequirements::memoryTypeBits)
+uint32_t selectDeviceMemoryHeap( vk::PhysicalDevice& physicalDevice, vk::MemoryRequirements memoryRequirements, vk::MemoryPropertyFlags requiredFlags ) {
+  // Initial implementation doesn't have any real requirements, just select the first compatible heap
+  vk::PhysicalDeviceMemoryProperties memoryProperties = physicalDevice.getMemoryProperties();
+
+  for(uint32_t memType = 0u; memType < 32; ++memType) {
+    uint32_t memTypeBit = 1 << memType;
+    if( memoryRequirements.memoryTypeBits & memTypeBit ) {
+      auto deviceMemType = memoryProperties.memoryTypes[memType];
+      if( (deviceMemType.propertyFlags & requiredFlags ) == requiredFlags ) {
+        return memType;
+      }
+    }
+  }
+  throw std::runtime_error("Failed to find suitable heap type for flags: " + vk::to_string(requiredFlags));
+}
+
+/// Allocate device memory suitable for the specified buffer
+vk::UniqueDeviceMemory allocateDeviceMemoryForBuffer( vk::PhysicalDevice& physicalDevice, vk::Device& device, vk::Buffer& buffer, vk::MemoryPropertyFlags userReqs = {} ) {
+  // Find out what kind of memory the buffer needs
+  vk::MemoryRequirements memReq = device.getBufferMemoryRequirements(buffer);
+
+  auto heapIdx = selectDeviceMemoryHeap(physicalDevice, memReq, userReqs );
+
+  vk::MemoryAllocateInfo info(
+        memReq.size,
+        heapIdx);
+
+  return device.allocateMemoryUnique(info);
+}
+
+/// Bind memory to a buffer
+void bindMemoryToBuffer(vk::Device& device, vk::Buffer& buffer, vk::DeviceMemory& memory, vk::DeviceSize offset = 0) {
+  device.bindBufferMemory(buffer, memory, offset);
+}
+
+/// Map a region of device memory to host memory
+void* mapMemory( vk::Device& device, vk::DeviceMemory& deviceMem, vk::DeviceSize offset, vk::DeviceSize size ) {
+  return device.mapMemory(deviceMem, offset, size);
+}
+
+/// Unmap a region of device memory
+void unmapMemory( vk::Device& device, vk::DeviceMemory& deviceMem ) {
+  device.unmapMemory(deviceMem);
+}
+
+/// Flush memory/caches
+void flushMemoryRanges( vk::Device& device, vk::ArrayProxy<const vk::MappedMemoryRange> mem ) {
+  device.flushMappedMemoryRanges(mem.size(), mem.data());
+}
 
 /// Populate a command buffer in order to copy data from source to dest
-void fillCB_CopyBufferObjects( vk::CommandBuffer& commandBuffer, vk::Buffer& src, vk::Buffer& dst, vk::DeviceSize srcOff = 0, vk::DeviceSize dstOff = 0, vk::DeviceSize size = 0 )
+void fillCB_CopyBufferObjects( vk::CommandBuffer& commandBuffer, vk::Buffer& src, vk::Buffer& dst, vk::DeviceSize srcOff, vk::DeviceSize dstOff, vk::DeviceSize size )
 {
   // Start the buffer
   // Default flags
@@ -84,10 +145,12 @@ void fillCB_CopyBufferObjects( vk::CommandBuffer& commandBuffer, vk::Buffer& src
   vk::CommandBufferBeginInfo beginInfo;
   commandBuffer.begin(&beginInfo);
 
-  //vk::BufferCopy cpy(srcOff, dstOff, size);
-  vk::ArrayProxy<vk::BufferCopy> cpy = {{srcOff, dstOff, size}};
-  commandBuffer.copyBuffer(src, dst, cpy.size(), cpy.data());
+  // TODO: There's some syntax error here
+  //vk::ArrayProxy<vk::BufferCopy> cpy = {{srcOff, dstOff, size}};
+  //commandBuffer.copyBuffer(src, dst, cpy.size(), cpy.data());
 
+  vk::BufferCopy cpy(srcOff, dstOff, size);
+  commandBuffer.copyBuffer(src, dst, 1, &cpy);
 
   // End the buffer
   commandBuffer.end();
@@ -135,6 +198,16 @@ void printDetailedPhysicalDeviceInfo( vk::PhysicalDevice& device ) {
             << "Heaps : " << props.memoryHeapCount << "\n"
             << std::endl;
 
+  for(auto i = 0u; i < props.memoryTypeCount; ++i )
+  {
+    auto memoryType = props.memoryTypes[i];
+    if( (memoryType.propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) ) {
+      std::cout << "Type: " << i << ", Host visible: TRUE" << std::endl;
+    } else {
+      std::cout << "Type: " << i << ", Host visible: FALSE" << std::endl;
+    }
+  }
+  std::cout << std::endl;
 }
 void printQueueFamilyProperties( std::vector<vk::QueueFamilyProperties>& props ) {
   std::cout << "== Queue Family Properties ==" << std::endl;
@@ -201,7 +274,7 @@ int main(int argc, char* argv[])
     // Get the queue from the device
     // queues are the thing that actually do the work
     // could be a subprocessor on the device, or some other subsection of capability
-    vk::Queue q = logicalDevice->getQueue(qFamilyGraphicsIdx, 0);
+    [[maybe_unused]] vk::Queue q = logicalDevice->getQueue(qFamilyGraphicsIdx, 0);
 
     // A pool for allocating command buffers
     // Flags here are flexible, but may add a small overhead
@@ -234,15 +307,70 @@ int main(int argc, char* argv[])
     // Alternatively when resetting specify the resource reset bit (but assuming not every frame?)
     logicalDevice->resetCommandPool(commandPool.get(), vk::CommandPoolResetFlagBits::eReleaseResources);
 
+
+    // Setup 2 buffers to play with
+    // 1: Source buffer containing some simple test data
+    // 2: Empty buffer to copy this data into
+    std::string testData("Hello, World!");
+    auto bufSize = testData.size() * sizeof(std::string::value_type);
+    vk::UniqueBuffer srcBuffer = createBuffer(
+          logicalDevice.get(),
+          bufSize,
+          vk::BufferUsageFlagBits::eTransferSrc);
+    vk::UniqueBuffer dstBuffer = createBuffer(
+          logicalDevice.get(),
+          bufSize,
+          vk::BufferUsageFlagBits::eTransferDst);
+
+    // Allocate memory for the buffers
+    auto srcBufferMem = allocateDeviceMemoryForBuffer(physicalDevice, logicalDevice.get(), srcBuffer.get(), {vk::MemoryPropertyFlagBits::eHostVisible} );
+    auto dstBufferMem = allocateDeviceMemoryForBuffer(physicalDevice, logicalDevice.get(), dstBuffer.get(), {vk::MemoryPropertyFlagBits::eHostVisible} );
+
+    // Bind memory to the buffers
+    bindMemoryToBuffer(logicalDevice.get(), srcBuffer.get(), srcBufferMem.get());
+    bindMemoryToBuffer(logicalDevice.get(), dstBuffer.get(), dstBufferMem.get());
+
+    // Populate srcBuffer with our data
+    auto pSrcBuffer = mapMemory( logicalDevice.get(), srcBufferMem.get(), 0, VK_WHOLE_SIZE);
+    std::memcpy(pSrcBuffer, testData.data(), bufSize);
+
+    // Unless the memory region has VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    // then we're responsible for flushing the cache after modifications/before reading
+    // TODO: This should check the memory buffer properties, meaning we need to store them in some kind of class
+    flushMemoryRanges(logicalDevice.get(),{vk::MappedMemoryRange(srcBufferMem.get(), 0, VK_WHOLE_SIZE)});
+    unmapMemory(logicalDevice.get(), srcBufferMem.get());
+
+    std::cout << "Successfully setup buffers and mapped test data into source buffer" << std::endl;
+
     // Fill the command buffer with our commands
-    // TODO: Shouldn't have skimmed that chapter on allocating buffers should ye?
-    // fillCB_CopyBufferObjects(commandBuffer, srcBuffer, dstBuffer);
+    fillCB_CopyBufferObjects(commandBuffer.get(), srcBuffer.get(), dstBuffer.get(), 0, 0, bufSize);
 
-
+    // And submit the buffer to the queue to start doing stuff
+    vk::SubmitInfo submitInfo(
+          0,nullptr,
+          nullptr,
+          1,
+          &commandBuffer.get(),
+          0,
+          nullptr
+          );
+    vk::Fence fence;
+    q.submit(1, &submitInfo, fence);
 
     // Wait for everything to finish before cleanup
     // Cleanup handled by the smart handles in this case
     logicalDevice->waitIdle();
+
+    // Now read back from the destination buffer
+    std::string dstString(bufSize, '\0');
+    auto pDstBuffer = mapMemory( logicalDevice.get(), dstBufferMem.get(), 0, VK_WHOLE_SIZE );
+    flushMemoryRanges(logicalDevice.get(),{{dstBufferMem.get(), 0, VK_WHOLE_SIZE}});
+    std::memcpy(&dstString[0], pDstBuffer, bufSize);
+    unmapMemory(logicalDevice.get(), dstBufferMem.get());
+
+    std::cout << "Read string from dstBuffer: " << dstString << std::endl;
+    if( testData != dstString ) throw std::runtime_error("ERORR: Failed to copy data from source -> dest buffer");
+
   } catch ( std::exception& e) {
     std::cerr << e.what() << std::endl;
     return 1;
