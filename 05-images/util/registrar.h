@@ -51,6 +51,9 @@ public:
 #endif
   vk::SwapchainKHR& createSwapChain();
   void createSwapChainImageViews();
+  void createRenderPass();
+  void createGraphicsPipeline();
+  void createFramebuffers();
 
   vk::CommandPool& createCommandPool( vk::CommandPoolCreateFlags flags );
   vk::UniqueBuffer createBuffer( vk::DeviceSize size, vk::BufferUsageFlags usageFlags );
@@ -86,6 +89,10 @@ public:
   vk::SwapchainKHR& swapChain();
   std::vector<vk::Image>& swapChainImages();
   std::vector<vk::UniqueCommandPool>& commandPools();
+  vk::RenderPass& renderPass();
+  std::vector<vk::UniqueFramebuffer>& frameBuffers();
+  vk::Extent2D& swapChainExtent();
+  vk::UniquePipeline& graphicsPipeline();
 
   std::string physicalDeviceTypeToString( vk::PhysicalDeviceType type );
   std::string vulkanAPIVersionToString( uint32_t version );
@@ -98,6 +105,9 @@ private:
   Registrar(const Registrar&) = delete;
   Registrar(const Registrar&&) = delete;
   ~Registrar();
+
+  std::vector<char> readFile(const std::string& fileName);
+  vk::UniqueShaderModule createShaderModule(const std::string& fileName);
 
   static Registrar mReg;
 
@@ -112,8 +122,14 @@ private:
   vk::UniqueSurfaceKHR mSurface;
   vk::UniqueSwapchainKHR mSwapChain;
   vk::Format mSwapChainFormat;
+  vk::Extent2D mSwapChainExtent;
   std::vector<vk::Image> mSwapChainImages;
   std::vector<vk::UniqueImageView> mSwapChainImageViews;
+  /// One framebuffer definition for each swap chain image, as we'll cycle through them each frame
+  std::vector<vk::UniqueFramebuffer> mSwapChainFrameBuffers;
+  vk::UniquePipelineLayout mPipelineLayout;
+  vk::UniqueRenderPass mRenderPass;
+  vk::UniquePipeline mGraphicsPipeline;
 
   uint32_t mQueueFamIndex = std::numeric_limits<uint32_t>::max();
   std::vector<vk::Queue> mQueues;
@@ -137,4 +153,8 @@ inline vk::Queue& Registrar::queue() { return mQueues.front(); }
 inline vk::SwapchainKHR& Registrar::swapChain() { return mSwapChain.get(); }
 inline std::vector<vk::Image>& Registrar::swapChainImages() { return mSwapChainImages; }
 inline std::vector<vk::UniqueCommandPool>& Registrar::commandPools() { return mCommandPools; }
+inline vk::RenderPass& Registrar::renderPass() { return mRenderPass.get(); }
+inline std::vector<vk::UniqueFramebuffer>& Registrar::frameBuffers() { return mSwapChainFrameBuffers; }
+inline vk::Extent2D& Registrar::swapChainExtent() { return mSwapChainExtent; }
+inline vk::UniquePipeline& Registrar::graphicsPipeline() { return mGraphicsPipeline; }
 #endif

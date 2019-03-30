@@ -39,6 +39,11 @@ private:
   vk::Device mDevice;
   vk::Queue mGraphicsQueue;
   vk::Queue mPresentQueue;
+  vk::CommandPool mCommandPool;
+  std::vector<vk::UniqueCommandBuffer> mCommandBuffers;
+
+  vk::UniqueSemaphore mImageAvailableSemaphore;
+  vk::UniqueSemaphore mRenderFinishedSemaphore;
 
   void initWindow() {
     glfwInit();
@@ -105,49 +110,125 @@ private:
     reg.createSwapChain();
     reg.swapChainImages();
     reg.createSwapChainImageViews();
+    reg.createRenderPass();
+    reg.createGraphicsPipeline();
+    reg.createFramebuffers();
 
-/*
-    // A pool for allocating command buffers
-    // Flags here are flexible, but may add a small overhead
-    auto commandPool = reg.createCommandPool( {  vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
+    // Create the semaphores we're gonna use
+    mImageAvailableSemaphore = mDevice.createSemaphoreUnique({});
+    mRenderFinishedSemaphore = mDevice.createSemaphoreUnique({});
+
+    // TODO: Misfit
+    mCommandPool = reg.createCommandPool( { /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
                                                  vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
+                                                                                         */
                                               });
 
-    // Now make a command buffer
-    vk::CommandBufferAllocateInfo commandBufferAllocateInfo(
-          commandPool, // The pool to allocate from
-          vk::CommandBufferLevel::ePrimary, // A primary buffer (Secondary buffers are ones that can be called by other command buffers)
-          1 // Just the one for now
-          );
+    // Now make a command buffer for each framebuffer
+     vk::CommandBufferAllocateInfo commandBufferAllocateInfo = {};
+     commandBufferAllocateInfo.setCommandPool(mCommandPool)
+         .setCommandBufferCount(static_cast<uint32_t>(reg.swapChainImages().size()))
+         .setLevel(vk::CommandBufferLevel::ePrimary)
+         ;
 
-    auto commandBuffers = mDevice.allocateCommandBuffersUnique(commandBufferAllocateInfo);
-    if( commandBuffers.empty() ) throw std::runtime_error("Failed to allocate command buffer");
-    // I guess normally you'd allocate a bunch, but only 1 here now
-    // pull it out of the vector
-    auto commandBuffer = std::move(commandBuffers.front()); commandBuffers.clear();
+    mCommandBuffers = reg.device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
 
-    // This is pointless in this trivial example, but here's how to reset all buffers in a pool.
-    // Recycling command buffers should be more efficient than recreating all the time
-    // Typically this is used at the end of a frame to return the buffers back to the pool for next time
-    // If reset without returning resources to the pool buffer complexity should remain constant
-    // to avoid unecessary bloat if a buffer becomes smaller than the previous usage
-    // Alternatively when resetting specify the resource reset bit (but assuming not every frame?)
-    mDevice.resetCommandPool(commandPool, vk::CommandPoolResetFlagBits::eReleaseResources);
+    for( auto i = 0u; i < mCommandBuffers.size(); ++i ) {
+      auto commandBuffer = mCommandBuffers[i].get();
+      vk::CommandBufferBeginInfo beginInfo = {};
+      beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution - TODO: Wat?
+          .setPInheritanceInfo(nullptr)
+          ;
+      commandBuffer.begin(beginInfo);
 
+      // Start the render pass
+      vk::RenderPassBeginInfo renderPassInfo = {};
+      renderPassInfo.setRenderPass(reg.renderPass())
+                    .setFramebuffer(reg.frameBuffers()[i].get());
+      renderPassInfo.renderArea.offset = vk::Offset2D(0,0);
+      renderPassInfo.renderArea.extent = reg.swapChainExtent();
+      // Info for attachment load op clear
+      std::array<float,4> col = {0.f,.0f,0.f,1.f};
+      vk::ClearValue clearColour(col);
+      renderPassInfo.setClearValueCount(1)
+        .setPClearValues(&clearColour)
+        ;
+      // render commands will be embedded in primary buffer and no secondary command buffers
+      // will be executed
+      commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-    // Setup 2 buffers to play with
-    // 1: Source buffer containing some simple test data
-    // 2: Empty buffer to copy this data into
-    // TODO: Length here hardcoded to multiple of 4 to ensure alignment, deal with this later :P
-    std::string testData("Hello, World! Live Long and prosper \\o/ ");
-    auto bufSize = testData.size() * sizeof(std::string::value_type);
-*/
+      // Now it's time to finally draw our one crappy little triangle >.<
+      commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, reg.graphicsPipeline().get());
+      commandBuffer.draw(3, // Draw 3 vertices
+                         1, // Used for instanced rendering, 1 otherwise
+                         0, // First vertex
+                         0  // First instance
+                         );
 
+      // End the render pass
+      commandBuffer.endRenderPass();
+
+      // End the command buffer
+      commandBuffer.end();
+    }
   }
 
   void loop() {
+    auto& reg = Registrar::singleton();
+
     while(!glfwWindowShouldClose(mWindow)) {
       glfwPollEvents();
+
+      // Acquire and image from the swap chain
+      auto imageIndex = mDevice.acquireNextImageKHR(
+            reg.swapChain(), // Get an image from this
+            std::numeric_limits<uint64_t>::max(), // Don't timeout
+            mImageAvailableSemaphore.get(), // semaphore to signal once presentation is finished with the image
+            vk::Fence()).value; // Dummy fence, we don't care here
+
+      // Submit the command buffer
+      vk::SubmitInfo submitInfo = {};
+      auto commandBuffer = mCommandBuffers[imageIndex].get();
+      // Don't execute until this is ready
+      vk::Semaphore waitSemaphores[] = {mImageAvailableSemaphore.get()};
+      // place the wait before writing to the colour attachment
+
+      // If we have render pass depedencies
+      vk::PipelineStageFlags waitStages[] {vk::PipelineStageFlagBits::eColorAttachmentOutput};
+
+      // Otherwise wait until the pipeline starts to allow reading?
+      //vk::PipelineStageFlags waitStages[] {vk::PipelineStageFlagBits::eTopOfPipe};
+
+
+      // Signal this semaphore when rendering is done
+      vk::Semaphore signalSemaphores[] = {mRenderFinishedSemaphore.get()};
+      submitInfo.setWaitSemaphoreCount(1)
+          .setPWaitSemaphores(waitSemaphores)
+          .setPWaitDstStageMask(waitStages)
+          .setCommandBufferCount(1)
+          .setPCommandBuffers(&commandBuffer)
+          .setSignalSemaphoreCount(1)
+          .setPSignalSemaphores(signalSemaphores)
+          ;
+
+      vk::ArrayProxy<vk::SubmitInfo> submits(submitInfo);
+      mGraphicsQueue.submit(submits.size(), submits.data(), vk::Fence());
+
+      // Present the results of a frame to the swap chain
+      vk::SwapchainKHR swapChains[] = {reg.swapChain()};
+      vk::PresentInfoKHR presentInfo = {};
+      presentInfo.setWaitSemaphoreCount(1)
+          .setPWaitSemaphores(signalSemaphores) // Wait before presentation can start
+          .setSwapchainCount(1)
+          .setPSwapchains(swapChains)
+          .setPImageIndices(&imageIndex)
+          .setPResults(nullptr)
+          ;
+
+      mPresentQueue.presentKHR(presentInfo);
+
+      // Wait until everything is finished (Not efficient, but avoids filling up the queue into infinity :P)
+      mPresentQueue.waitIdle();
     }
   }
 

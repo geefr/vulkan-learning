@@ -2,6 +2,7 @@
 #include "registrar.h"
 
 #include <iostream>
+#include <fstream>
 
 Registrar Registrar::mReg;
 
@@ -22,8 +23,11 @@ void Registrar::tearDown() {
   // cleanup order in that case..
   mDevice->waitIdle();
 
+  for( auto& f : mSwapChainFrameBuffers ) f.release(); // Before image views and render pass
+  mGraphicsPipeline.release();
+  mPipelineLayout.release();
+  mRenderPass.release();
   for( auto& iv : mSwapChainImageViews ) iv.release();
-
   mSwapChain.release();
   mSurface.release();
   for( auto& p : mCommandPools ) p.release();
@@ -37,8 +41,8 @@ void Registrar::tearDown() {
 
 void Registrar::ensureExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName) {
   if( std::find_if(extensions.begin(), extensions.end(), [&](auto& e) {
-    return e.extensionName == extensionName;
-  }) == extensions.end()) throw std::runtime_error("Extension not supported: " + extensionName);
+                   return e.extensionName == extensionName;
+}) == extensions.end()) throw std::runtime_error("Extension not supported: " + extensionName);
 }
 
 vk::Instance& Registrar::createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer) {
@@ -99,14 +103,14 @@ vk::Instance& Registrar::createVulkanInstance(const std::vector<const char*>& re
   mDidl.init(mInstance.get(), ::vkGetInstanceProcAddr);
 
   vk::DebugUtilsMessengerCreateInfoEXT cbInfo(
-        {},
-        {vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
-         vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
-         vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
-         vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning},
-        {vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-         vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-         vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation},
+  {},
+  {vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+   vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
+   vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+   vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning},
+  {vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+   vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+   vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation},
         debugCallback,
         nullptr
         );
@@ -180,7 +184,7 @@ vk::Device& Registrar::createLogicalDevice() {
   deviceRequiredFeatures.geometryShader = true;
 
   vk::DeviceCreateInfo info(
-    vk::DeviceCreateFlags(),
+        vk::DeviceCreateFlags(),
         1, // Queue create info count
         &queueInfo, // Queue create info structs
         enabledLayerCount, // Enabled layer count
@@ -198,7 +202,7 @@ vk::Device& Registrar::createLogicalDevice() {
 }
 
 vk::CommandPool& Registrar::createCommandPool( vk::CommandPoolCreateFlags flags ) {
-  vk::CommandPoolCreateInfo info(flags, mQueueFamIndex);
+  vk::CommandPoolCreateInfo info(flags, mQueueFamIndex); // TODO: Hack! should be passed by caller/some reference to the command queue class we don't have yet
   mCommandPools.emplace_back(mDevice->createCommandPoolUnique(info));
   return mCommandPools.back().get();
 }
@@ -356,14 +360,14 @@ vk::SwapchainKHR& Registrar::createSwapChain() {
   // TODO: Just choosing the first one here..
   mSwapChainFormat = surfaceFormats.front().format;
   auto chosenColourSpace = surfaceFormats.front().colorSpace;
-
+  mSwapChainExtent = caps.currentExtent;
   vk::SwapchainCreateInfoKHR info(
         vk::SwapchainCreateFlagsKHR(),
         mSurface.get(),
         numImages, // Num images in the swapchain
         mSwapChainFormat, // Pixel format
         chosenColourSpace, // Colour space
-        caps.currentExtent, // Size of window
+        mSwapChainExtent, // Size of window
         1, // Image array layers
         imageUsage, // Image usage flags
         vk::SharingMode::eExclusive, 0, nullptr, // Exclusive use by one queue
@@ -384,26 +388,255 @@ vk::SwapchainKHR& Registrar::createSwapChain() {
 void Registrar::createSwapChainImageViews() {
   for( auto i = 0u; i < mSwapChainImages.size(); ++i ) {
     vk::ImageViewCreateInfo info(
-          {}, // empty flags
+    {}, // empty flags
           mSwapChainImages[i],
           vk::ImageViewType::e2D,
           mSwapChainFormat,
-          {}, // IDENTITY component mapping
+    {}, // IDENTITY component mapping
           vk::ImageSubresourceRange(
-          {vk::ImageAspectFlagBits::eColor},0, 1, 0, 1)
+    {vk::ImageAspectFlagBits::eColor},0, 1, 0, 1)
           );
     mSwapChainImageViews.emplace_back( mDevice->createImageViewUnique(info) );
+  }
+}
+
+void Registrar::createRenderPass() {
+  // The render pass contains stuff like what the framebuffer attachments are and things
+  vk::AttachmentDescription colourAttachment = {};
+  colourAttachment.setFormat(mSwapChainFormat)
+      .setSamples(vk::SampleCountFlagBits::e1)
+      .setLoadOp(vk::AttachmentLoadOp::eClear) // What to do before rendering
+      .setStoreOp(vk::AttachmentStoreOp::eStore) // What to do after rendering
+      .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+      .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
+      .setInitialLayout(vk::ImageLayout::eUndefined) // Image layout before render pass begins, we don't care, gonna clear anyway
+      .setFinalLayout(vk::ImageLayout::ePresentSrcKHR) // Image layout to transfer to when render pass finishes, ready for presentation
+      ;
+
+  // For starters we only need one sub-pass to draw
+  // Multiple sub passes are used for multi-pass rendering
+  // putting them in one overall render pass means vulkan can reorder
+  // them as needed
+  vk::AttachmentReference colourAttachmentRef = {};
+  colourAttachmentRef.setAttachment(0) // Index in attachment description array (We only have one so far)
+      .setLayout(vk::ImageLayout::eColorAttachmentOptimal) // Layout for the attachment during this subpass. This attachment is our colour buffer so marked as such here
+      ;
+
+  vk::SubpassDescription subpass = {};
+  subpass.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics) // Marked as a graphics subpass, looks like we can mix multiple subpass types in one render pass?
+      .setColorAttachmentCount(1)
+      .setPColorAttachments(&colourAttachmentRef)
+      ;
+  // Index of colour attachment here matches layout = 0 in fragment shader
+  // So the frag shader can reference multiple attachments as its output!
+
+  // Now let's actually make the render pass
+  vk::RenderPassCreateInfo renderPassInfo = {};
+  renderPassInfo.setAttachmentCount(1)
+      .setPAttachments(&colourAttachment)
+      .setSubpassCount(1)
+      .setPSubpasses(&subpass)
+      ;
+
+  /*
+   * Setup subpass dependencies
+   * This is needed to ensure that the render pass
+   * doesn't begin until tthe image is available
+   *
+   * Apparently an alternative is to set the waitStages of the command buffer
+   * to top of pipe to ensure rendering doesn't begin until the pipeline is started?
+   * https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation
+   *
+   * TODO: Yeah I don't understand this and the tutorials gloss over it, probably more info in the
+   * synchronisation chapter of the book
+   */
+
+  vk::SubpassDependency dep = {};
+  dep.setSrcSubpass(VK_SUBPASS_EXTERNAL) // implicit subpass before this pass
+      .setDstSubpass(0) // The index of our subpass
+      .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput) // Wait on this operation
+      .setSrcAccessMask(vk::AccessFlags()) // Which needs to happen in this stage...here we're waiting for the swap chain to finish reading from the image
+      .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput) // The operations which should wait are in the colour attachment stage
+      .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite) // and involve the reading and writing of the colour attachment
+                                                            // These prevent the transition from happening until it's necessary/allowed, when we want to start writing colours to it..
+      ;
+
+  renderPassInfo.setDependencyCount(1)
+      .setPDependencies(&dep)
+      ;
+
+  mRenderPass = mDevice->createRenderPassUnique(renderPassInfo);
+}
+
+void Registrar::createGraphicsPipeline() {
+  /*
+   * The programmable parts of the pipeline are similar to gl
+   * And in this case the shaders were even compiled from glsl -> SPIR-V
+   */
+  auto vertShaderMod = createShaderModule("vert.spv");
+  vk::PipelineShaderStageCreateInfo vertInfo(
+        vk::PipelineShaderStageCreateFlags(),
+        vk::ShaderStageFlagBits::eVertex,
+        vertShaderMod.get(),
+        "main",
+        nullptr // Specialisation info - allows specification of shader constants at link time
+        );
+
+  auto fragShaderMod = createShaderModule("frag.spv");
+  vk::PipelineShaderStageCreateInfo fragInfo(
+        vk::PipelineShaderStageCreateFlags(),
+        vk::ShaderStageFlagBits::eFragment,
+        fragShaderMod.get(),
+        "main",
+        nullptr // Specialisation info - allows specification of shader constants at link time
+        );
+
+  vk::PipelineShaderStageCreateInfo shaderStages[] = {vertInfo, fragInfo};
+
+  /*
+   * Then there's the fixed function sections of the pipeline
+   */
+  // Vertex input
+  // For now nothing here as vertices are hardcoded in the shader
+  vk::PipelineVertexInputStateCreateInfo vertInputInfo(
+        {},
+        0, //Binding description count
+        nullptr, // Binding descriptions
+        0, // Attribute description count
+        nullptr // Attribute descriptions
+        );
+
+  // Input assembly
+  // Typical triangles setup
+  vk::PipelineInputAssemblyStateCreateInfo inputAssInfo(
+        {},
+        vk::PrimitiveTopology::eTriangleList,
+        false // Primitive restart
+        );
+
+  // Viewport
+  vk::Viewport viewport(0.f,0.f, mSwapChainExtent.width, mSwapChainExtent.height, 0.f, 1.f);
+  vk::Rect2D scissor({0,0},mSwapChainExtent);
+  vk::PipelineViewportStateCreateInfo viewportInfo({}, 1, &viewport, 1, &scissor);
+
+  // Rasteriser
+  vk::PipelineRasterizationStateCreateInfo rasterisationInfo(
+          {},
+          false, // Depth clamp enable
+          false, // Discard enable
+          vk::PolygonMode::eFill, // Cool, we can just toggle this to make a wireframe <3
+          vk::CullModeFlagBits::eBack, // Backface culling of course
+          vk::FrontFace::eCounterClockwise, // Tutorial is of course wrong here, so we'll need to fix the vertices
+          false, // Depth bias enable
+          0.f, // Depth bias factor
+          false, // Depth bias clamp
+          0.f, // Depth bias clamp
+          1.f // Line width
+          );
+
+  // Multisampling
+  vk::PipelineMultisampleStateCreateInfo multisampleInfo = {};
+  multisampleInfo.setSampleShadingEnable(false)
+                .setRasterizationSamples(vk::SampleCountFlagBits::e1)
+                ;
+
+  // Depth/Stencil test
+  // Not yet, we're gonna pass null for this one ;)
+
+  // Colour blending
+  // attachment state is per-framebuffer
+  // creat info is global to the pipeline
+  vk::PipelineColorBlendAttachmentState colourBlendAttach = {};
+  colourBlendAttach.setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
+      .setBlendEnable(false)
+      /*
+      .setBlendEnable(true)
+      .setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha)
+      .setDstColorBlendFactor(vk::BlendFactor::eOneMinusDstAlpha)
+      .setColorBlendOp(vk::BlendOp::eAdd)
+      .setSrcAlphaBlendFactor(vk::BlendFactor::eOne)
+      .setDstAlphaBlendFactor(vk::BlendFactor::eZero)
+      .setAlphaBlendOp(vk::BlendOp::eAdd)
+      */
+      ;
+
+  vk::PipelineColorBlendStateCreateInfo colourBlendInfo = {};
+  colourBlendInfo.setLogicOpEnable(false)
+      .setLogicOp(vk::LogicOp::eCopy)
+      .setAttachmentCount(1)
+      .setPAttachments(&colourBlendAttach)
+      .setBlendConstants({0.f,0.f,0.f,0.f})
+      ;
+
+  // Dynamic state
+  // There's a dynamic state section that allows setting things like viewport/etc without rebuilding
+  // the entire pipeline
+  // If this is provided then the state has to be provided at draw time, so for now it's just another nullptr
+
+  // Pipeline layout
+  // Pipeline layout is where uniforms and such go
+  // and they have to be known when the pipeline is built
+  // So no randomly chucking uniforms around like we do in gl right?
+  vk::PipelineLayoutCreateInfo layoutInfo = {};
+  layoutInfo.setSetLayoutCount(0)
+      .setPSetLayouts(nullptr)
+      .setPushConstantRangeCount(0)
+      .setPPushConstantRanges(nullptr)
+      ;
+
+  mPipelineLayout = mDevice->createPipelineLayoutUnique(layoutInfo);
+
+
+  // Finally let's make the pipeline itself
+  vk::GraphicsPipelineCreateInfo pipelineInfo = {};
+  pipelineInfo.setStageCount(2)
+      .setPStages(shaderStages)
+      .setPVertexInputState(&vertInputInfo)
+      .setPInputAssemblyState(&inputAssInfo)
+      .setPViewportState(&viewportInfo)
+      .setPRasterizationState(&rasterisationInfo)
+      .setPMultisampleState(&multisampleInfo)
+      .setPDepthStencilState(nullptr)
+      .setPColorBlendState(&colourBlendInfo)
+      .setPDynamicState(nullptr)
+      .setLayout(mPipelineLayout.get())
+      .setRenderPass(mRenderPass.get()) // The render pass the pipeline will be used in
+      .setSubpass(0) // The sub pass the pipeline will be used in
+      .setBasePipelineHandle({}) // Derive from an existing pipeline
+      .setBasePipelineIndex(-1) // Or the index of a pipeline, which may not yet exist. DERIVATIVE_BIT must be specified in flags to do this
+      ;
+
+
+  mGraphicsPipeline = mDevice->createGraphicsPipelineUnique({}, pipelineInfo);
+
+  // Shader modules deleted here, only needed for pipeline init
+}
+
+void Registrar::createFramebuffers() {
+  for( auto i = 0u; i < mSwapChainImages.size(); ++i ) {
+    auto attachment = mSwapChainImageViews[i].get();
+
+    vk::FramebufferCreateInfo info = {};
+    info.setRenderPass(mRenderPass.get()) // Compatible with this render pass (don't use it with any other)
+        .setAttachmentCount(1) // 1 attachment - The image from the swap chain
+        .setPAttachments(&attachment) // Mapped to the first attachment of the render pass
+        .setWidth(mSwapChainExtent.width)
+        .setHeight(mSwapChainExtent.height)
+        .setLayers(1)
+        ;
+
+    mSwapChainFrameBuffers.emplace_back( mDevice->createFramebufferUnique(info));
   }
 }
 
 std::string Registrar::physicalDeviceTypeToString( vk::PhysicalDeviceType type ) {
   switch(type)
   {
-    case vk::PhysicalDeviceType::eCpu: return "CPU";
-    case vk::PhysicalDeviceType::eDiscreteGpu: return "Discrete GPU";
-    case vk::PhysicalDeviceType::eIntegratedGpu: return "Integrated GPU";
-    case vk::PhysicalDeviceType::eOther: return "Other";
-    case vk::PhysicalDeviceType::eVirtualGpu: return "Virtual GPU";
+  case vk::PhysicalDeviceType::eCpu: return "CPU";
+  case vk::PhysicalDeviceType::eDiscreteGpu: return "Discrete GPU";
+  case vk::PhysicalDeviceType::eIntegratedGpu: return "Integrated GPU";
+  case vk::PhysicalDeviceType::eOther: return "Other";
+  case vk::PhysicalDeviceType::eVirtualGpu: return "Virtual GPU";
   }
   return "Unknown";
 };
@@ -423,9 +656,9 @@ void Registrar::printPhysicalDeviceProperties( vk::PhysicalDevice& device ) {
             << "Vendor ID      :" << props.vendorID << "\n"
             << "Device Type    :" << physicalDeviceTypeToString(props.deviceType) << "\n"
             << "Device Name    :" << props.deviceName << "\n" // Just incase it's not nul-terminated
-            // pipeline cache uuid
-            // physical device limits
-            // physical device sparse properties
+               // pipeline cache uuid
+               // physical device limits
+               // physical device sparse properties
             << std::endl;
 }
 void Registrar::printDetailedPhysicalDeviceInfo( vk::PhysicalDevice& device ) {
@@ -462,6 +695,30 @@ void Registrar::printQueueFamilyProperties( std::vector<vk::QueueFamilyPropertie
               << std::endl;
 
   }
+}
+
+std::vector<char> Registrar::readFile(const std::string& fileName) {
+  std::ifstream file(fileName, std::ios::ate | std::ios::binary);
+  if( !file.is_open() ) throw std::runtime_error("Failed to open file: " + fileName);
+  auto fileSize = file.tellg(); // We started at the end
+  std::vector<char> buf(fileSize);
+  file.seekg(0);
+  file.read(buf.data(), fileSize);
+  file.close();
+  return buf;
+}
+
+vk::UniqueShaderModule Registrar::createShaderModule(const std::string& fileName) {
+  auto shaderCode = readFile(fileName);
+  // Note that data passed to info is as uint32_t*, so must be 4-byte aligned
+  // According to tutorial std::vector already satisfies worst case alignment needs
+  // TODO: But we should probably double check the alignment here just incase
+  vk::ShaderModuleCreateInfo info(
+        vk::ShaderModuleCreateFlags(),
+        shaderCode.size(),
+        reinterpret_cast<const uint32_t*>(shaderCode.data())
+        );
+  return mDevice->createShaderModuleUnique(info);
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL Registrar::debugCallback(
