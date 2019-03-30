@@ -18,6 +18,8 @@ class Registrar
 public:
   static Registrar& singleton();
 
+  void tearDown();
+
   vk::Instance& createVulkanInstance(std::string appName, uint32_t appVer, uint32_t apiVer = VK_API_VERSION_1_0);
   vk::Device& createLogicalDevice(vk::QueueFlags qFlags);
   uint32_t findQueue(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags);
@@ -57,18 +59,18 @@ private:
   Registrar();
   Registrar(const Registrar&) = delete;
   Registrar(const Registrar&&) = delete;
-  ~Registrar() = default;
+  ~Registrar();
 
   static Registrar mReg;
 
   vk::UniqueInstance mInstance;
   std::vector<vk::PhysicalDevice> mPhysicalDevices;
-  std::vector<vk::UniqueCommandPool> mCommandPools;
 
   // TODO: Initially just 1 logical device and 1 queue
   vk::UniqueDevice mDevice;
   uint32_t mQueueFamIndex = std::numeric_limits<uint32_t>::max();
   std::vector<vk::Queue> mQueues;
+  std::vector<vk::UniqueCommandPool> mCommandPools;
 };
 
 inline Registrar& Registrar::singleton() { return mReg; }

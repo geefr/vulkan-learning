@@ -9,7 +9,7 @@
 #include <stdexcept>
 
 /// Populate a command buffer in order to copy data from source to dest
-void fillCB_CopyBufferObjects( vk::CommandBuffer& commandBuffer, vk::Buffer& src, vk::Buffer& dst, vk::DeviceSize srcOff, vk::DeviceSize dstOff, vk::DeviceSize size )
+void fillCB_CopyBufferObjects( vk::CommandBuffer& commandBuffer, vk::Buffer& src, vk::Buffer& dst, vk::DeviceSize srcOff, vk::DeviceSize dstOff, vk::DeviceSize size, std::string testData )
 {
   // Start the buffer
   // Default flags
@@ -22,6 +22,10 @@ void fillCB_CopyBufferObjects( vk::CommandBuffer& commandBuffer, vk::Buffer& src
   // TODO: There's some syntax error here
   //vk::ArrayProxy<vk::BufferCopy> cpy = {{srcOff, dstOff, size}};
   //commandBuffer.copyBuffer(src, dst, cpy.size(), cpy.data());
+
+  // TODO: size here must be a multiple of 4
+  // Buffer must be created with TRANSFER_DST_BIT set
+  commandBuffer.updateBuffer(src, 0, size, testData.data());
 
   vk::BufferCopy cpy(srcOff, dstOff, size);
   commandBuffer.copyBuffer(src, dst, 1, &cpy);
@@ -91,54 +95,60 @@ int main(int argc, char* argv[])
     // Setup 2 buffers to play with
     // 1: Source buffer containing some simple test data
     // 2: Empty buffer to copy this data into
-    std::string testData("Hello, World! Live Long and prosper \\o/");
+    // TODO: Length here hardcoded to multiple of 4 to ensure alignment, deal with this later :P
+    std::string testData("Hello, World! Live Long and prosper \\o/ ");
     auto bufSize = testData.size() * sizeof(std::string::value_type);
 
-    SimpleBuffer srcBuffer(
-          bufSize,
-          {vk::BufferUsageFlagBits::eTransferSrc},
-          {vk::MemoryPropertyFlagBits::eHostVisible}
-          );
-    SimpleBuffer dstBuffer(
-          bufSize,
-          {vk::BufferUsageFlagBits::eTransferDst},
-          {vk::MemoryPropertyFlagBits::eHostVisible}
-          );
+    // Scoping braces to force buffers to be deleted before registrar teardown
+    {
+      SimpleBuffer srcBuffer(
+            bufSize,
+            {vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst},
+            {vk::MemoryPropertyFlagBits::eHostVisible}
+            );
+      SimpleBuffer dstBuffer(
+            bufSize,
+            {vk::BufferUsageFlagBits::eTransferDst},
+            {vk::MemoryPropertyFlagBits::eHostVisible}
+            );
+/*
+      auto pSrcBuffer = srcBuffer.map();
+      std::memcpy(pSrcBuffer, testData.data(), bufSize);
+      srcBuffer.flush();
+      srcBuffer.unmap();
+      std::cout << "Successfully setup buffers and mapped test data into source buffer" << std::endl;
+*/
+      // Fill the command buffer with our commands
+      fillCB_CopyBufferObjects(commandBuffer.get(), srcBuffer.buffer(), dstBuffer.buffer(), 0, 0, bufSize, testData);
 
-    auto pSrcBuffer = srcBuffer.map();
-    std::memcpy(pSrcBuffer, testData.data(), bufSize);
-    srcBuffer.flush();
-    srcBuffer.unmap();
-    std::cout << "Successfully setup buffers and mapped test data into source buffer" << std::endl;
+      // And submit the buffer to the queue to start doing stuff
+      vk::SubmitInfo submitInfo(
+            0,nullptr,
+            nullptr,
+            1,
+            &commandBuffer.get(),
+            0,
+            nullptr
+            );
+      vk::Fence fence;
+      q.submit(1, &submitInfo, fence);
 
-    // Fill the command buffer with our commands
-    fillCB_CopyBufferObjects(commandBuffer.get(), srcBuffer.buffer(), dstBuffer.buffer(), 0, 0, bufSize);
+      // Wait for everything to finish before cleanup
+      // Cleanup handled by the smart handles in this case
+      logicalDevice.waitIdle();
 
-    // And submit the buffer to the queue to start doing stuff
-    vk::SubmitInfo submitInfo(
-          0,nullptr,
-          nullptr,
-          1,
-          &commandBuffer.get(),
-          0,
-          nullptr
-          );
-    vk::Fence fence;
-    q.submit(1, &submitInfo, fence);
+      // Now read back from the destination buffer
+      std::string dstString(bufSize, '\0');
+      auto pDstBuffer = dstBuffer.map();
+      dstBuffer.flush();
+      std::memcpy(&dstString[0], pDstBuffer, bufSize);
+      dstBuffer.unmap();
 
-    // Wait for everything to finish before cleanup
-    // Cleanup handled by the smart handles in this case
-    logicalDevice.waitIdle();
+      std::cout << "Read string from dstBuffer: " << dstString << std::endl;
+      if( testData != dstString ) throw std::runtime_error("ERORR: Failed to copy data from source -> dest buffer");
+    }
 
-    // Now read back from the destination buffer
-    std::string dstString(bufSize, '\0');
-    auto pDstBuffer = dstBuffer.map();
-    dstBuffer.flush();
-    std::memcpy(&dstString[0], pDstBuffer, bufSize);
-    dstBuffer.unmap();
-
-    std::cout << "Read string from dstBuffer: " << dstString << std::endl;
-    if( testData != dstString ) throw std::runtime_error("ERORR: Failed to copy data from source -> dest buffer");
+    reg.tearDown();
 
   } catch ( std::exception& e) {
     std::cerr << e.what() << std::endl;

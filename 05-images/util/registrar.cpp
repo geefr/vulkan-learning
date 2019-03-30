@@ -8,6 +8,23 @@ Registrar Registrar::mReg;
 Registrar::Registrar()
 {}
 
+Registrar::~Registrar()
+{
+
+}
+
+void Registrar::tearDown() {
+
+  // TODO: Not sure if all this is needed?
+  // Initially thought the smart pointers would
+  // be best but might be hard to sort out
+  // cleanup order in that case..
+  mDevice->waitIdle();
+  for( auto& p : mCommandPools ) p.release();
+  mDevice.release();
+  mInstance.release();
+}
+
 vk::Instance& Registrar::createVulkanInstance(std::string appName, uint32_t appVer, uint32_t apiVer) {
   vk::ApplicationInfo applicationInfo(
         appName.c_str(), // Application Name
