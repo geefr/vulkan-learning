@@ -6,7 +6,8 @@
 Registrar Registrar::mReg;
 
 Registrar::Registrar()
-{}
+{
+}
 
 Registrar::~Registrar()
 {
@@ -21,11 +22,15 @@ void Registrar::tearDown() {
   // cleanup order in that case..
   mDevice->waitIdle();
 
+  for( auto& iv : mSwapChainImageViews ) iv.release();
 
   mSwapChain.release();
   mSurface.release();
   for( auto& p : mCommandPools ) p.release();
   mDevice.release();
+
+  mDebugUtilsMessenger.release();
+
   mInstance.release();
 
 }
@@ -36,7 +41,7 @@ void Registrar::ensureExtension(const std::vector<vk::ExtensionProperties>& exte
   }) == extensions.end()) throw std::runtime_error("Extension not supported: " + extensionName);
 }
 
-vk::Instance& Registrar::createVulkanInstance(std::string appName, uint32_t appVer, uint32_t apiVer) {
+vk::Instance& Registrar::createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer) {
   // First let's validate whether the extensions we need are available
   // If not there's no point doing anything and the system can't support the program
   // Assume that if presentation extensions are enabled at compile time then they're
@@ -44,18 +49,19 @@ vk::Instance& Registrar::createVulkanInstance(std::string appName, uint32_t appV
   // TODO: If there's multiple possibilities such as on Linux then maybe we need something more complicated
   auto supportedExtensions = vk::enumerateInstanceExtensionProperties();
 
-  std::vector<const char*> enabledInstanceExtensions;
+  std::vector<const char*> enabledInstanceExtensions = requiredExtensions;
 #ifdef VK_USE_PLATFORM_WIN32_KHR
   ensureInstanceExtension(supportedExtensions, "TODO");
 #endif
 #ifdef VK_USE_PLATFORM_XLIB_KHR
   enabledInstanceExtensions.push_back("VK_KHR_surface");
   enabledInstanceExtensions.push_back("VK_KHR_xlib_surface");
-  for( auto& e : enabledInstanceExtensions ) ensureExtension(supportedExtensions, e);
+
 #endif
 #ifdef VK_USE_PLATFORM_LIB_XCB_KHR
   ensureInstanceExtension(supportedExtensions, "TODO");
 #endif
+
 
   vk::ApplicationInfo applicationInfo(
         appName.c_str(), // Application Name
@@ -70,11 +76,14 @@ vk::Instance& Registrar::createVulkanInstance(std::string appName, uint32_t appV
   const char* const enabledLayerNames[] = {
     "VK_LAYER_LUNARG_standard_validation",
   };
+  enabledInstanceExtensions.push_back("VK_EXT_debug_utils");
+
 #else
   uint32_t enabledLayerCount = 0;
   const char* const* enabledLayerNames = nullptr;
 #endif
 
+  for( auto& e : enabledInstanceExtensions ) ensureExtension(supportedExtensions, e);
   vk::InstanceCreateInfo instanceCreateInfo(
         vk::InstanceCreateFlags(),
         &applicationInfo, // Application Info
@@ -85,6 +94,25 @@ vk::Instance& Registrar::createVulkanInstance(std::string appName, uint32_t appV
         );
 
   mInstance = vk::createInstanceUnique(instanceCreateInfo);
+
+#ifdef DEBUG
+  mDidl.init(mInstance.get(), ::vkGetInstanceProcAddr);
+
+  vk::DebugUtilsMessengerCreateInfoEXT cbInfo(
+        {},
+        {vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+         vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
+         vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+         vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning},
+        {vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+         vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+         vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation},
+        debugCallback,
+        nullptr
+        );
+
+  mDebugUtilsMessenger = mInstance->createDebugUtilsMessengerEXTUnique(cbInfo, nullptr, mDidl);
+#endif
 
   mPhysicalDevices = mInstance->enumeratePhysicalDevices();
   if( mPhysicalDevices.empty() ) throw std::runtime_error("Failed to enumerate physical devices");
@@ -115,9 +143,20 @@ vk::Device& Registrar::createLogicalDevice() {
 
   auto supportedExtensions = mPhysicalDevices.front().enumerateDeviceExtensionProperties();
   std::vector<const char*> enabledDeviceExtensions;
-#if defined(VK_USE_PLATFORM_WIN32_KHR) || defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_LIB_XCB_KHR)
+#if defined(VK_USE_PLATFORM_WIN32_KHR) || defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_LIB_XCB_KHR) || defined(USE_GLFW)
   enabledDeviceExtensions.push_back("VK_KHR_swapchain");
   for( auto& e : enabledDeviceExtensions ) ensureExtension(supportedExtensions, e);
+#endif
+
+#ifdef DEBUG
+  uint32_t enabledLayerCount = 1;
+  const char* const enabledLayerNames[] = {
+    "VK_LAYER_LUNARG_standard_validation",
+  };
+
+#else
+  uint32_t enabledLayerCount = 0;
+  const char* const* enabledLayerNames = nullptr;
 #endif
 
   float queuePriorities = 1.f;
@@ -144,8 +183,8 @@ vk::Device& Registrar::createLogicalDevice() {
     vk::DeviceCreateFlags(),
         1, // Queue create info count
         &queueInfo, // Queue create info structs
-        0, // Enabled layer count
-        nullptr, // Enabled layers
+        enabledLayerCount, // Enabled layer count
+        enabledLayerNames, // Enabled layers
         static_cast<uint32_t>(enabledDeviceExtensions.size()), // Enabled extension count
         enabledDeviceExtensions.data(), // Enabled extensions
         &deviceRequiredFeatures // Physical device features
@@ -235,6 +274,7 @@ uint32_t Registrar::findQueue(vk::PhysicalDevice& device, vk::QueueFlags require
   return it - qFamProps.begin();
 }
 
+#ifdef VK_USE_PLATFORM_XLIB_KHR
 uint32_t Registrar::findPresentQueueXlib(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags, Display* dpy, VisualID vid)
 {
   auto qFamProps = device.getQueueFamilyProperties();
@@ -269,8 +309,22 @@ vk::SurfaceKHR& Registrar::createSurfaceXlib(Display* dpy, Window window) {
   mSurface = mInstance->createXlibSurfaceKHRUnique(info);
   return mSurface.get();
 }
+#endif
 
-vk::SwapchainKHR& Registrar::createSwapChainXlib() {
+#ifdef USE_GLFW
+vk::SurfaceKHR& Registrar::createSurfaceGLFW(GLFWwindow* window) {
+  VkSurfaceKHR surface;
+  if(glfwCreateWindowSurface(mInstance.get(), window, nullptr, &surface) != VK_SUCCESS) {
+    throw std::runtime_error("createSurfaceGLFW: Failed to create window surface");
+  }
+
+  mSurface.reset(surface);
+  return mSurface.get();
+}
+#endif
+
+
+vk::SwapchainKHR& Registrar::createSwapChain() {
   if( !mPhysicalDevices.front().getSurfaceSupportKHR(mQueueFamIndex, mSurface.get()) ) throw std::runtime_error("createSwapChainXlib: Physical device doesn't support surfaces");
 
   // Parameters used in swapchain must comply with limits of the surface
@@ -300,14 +354,14 @@ vk::SwapchainKHR& Registrar::createSwapChainXlib() {
   // Choose a pixel format
   auto surfaceFormats = mPhysicalDevices.front().getSurfaceFormatsKHR(mSurface.get());
   // TODO: Just choosing the first one here..
-  auto chosenSurfaceFormat = surfaceFormats.front().format;
+  mSwapChainFormat = surfaceFormats.front().format;
   auto chosenColourSpace = surfaceFormats.front().colorSpace;
 
   vk::SwapchainCreateInfoKHR info(
         vk::SwapchainCreateFlagsKHR(),
         mSurface.get(),
         numImages, // Num images in the swapchain
-        chosenSurfaceFormat, // Pixel format
+        mSwapChainFormat, // Pixel format
         chosenColourSpace, // Colour space
         caps.currentExtent, // Size of window
         1, // Image array layers
@@ -325,6 +379,21 @@ vk::SwapchainKHR& Registrar::createSwapChainXlib() {
   mSwapChainImages = mDevice->getSwapchainImagesKHR(mSwapChain.get());
 
   return mSwapChain.get();
+}
+
+void Registrar::createSwapChainImageViews() {
+  for( auto i = 0u; i < mSwapChainImages.size(); ++i ) {
+    vk::ImageViewCreateInfo info(
+          {}, // empty flags
+          mSwapChainImages[i],
+          vk::ImageViewType::e2D,
+          mSwapChainFormat,
+          {}, // IDENTITY component mapping
+          vk::ImageSubresourceRange(
+          {vk::ImageAspectFlagBits::eColor},0, 1, 0, 1)
+          );
+    mSwapChainImageViews.emplace_back( mDevice->createImageViewUnique(info) );
+  }
 }
 
 std::string Registrar::physicalDeviceTypeToString( vk::PhysicalDeviceType type ) {
@@ -393,4 +462,16 @@ void Registrar::printQueueFamilyProperties( std::vector<vk::QueueFamilyPropertie
               << std::endl;
 
   }
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL Registrar::debugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT messageType,
+    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+    void* pUserData) {
+
+  // TODO: Proper debug callback, this probably doesn't even work
+  std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+
+  return VK_FALSE;
 }

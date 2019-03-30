@@ -5,4 +5,4 @@ add_executable(${targetName} main.cpp
   util/simplebuffer.h
   util/simplebuffer.cpp
 	)
-target_link_libraries( ${targetName} Vulkan::Vulkan ${X11_LIBRARIES} )
+target_link_libraries( ${targetName} Vulkan::Vulkan glfw ${X11_LIBRARIES} )

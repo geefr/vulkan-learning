@@ -19,10 +19,12 @@ if( MSVC )
   add_compile_definitions( VK_USE_PLATFORM_WIN32_KHR )
 else()
   find_package(X11 REQUIRED)
+  find_package(glfw3 REQUIRED)
 
   # Just assume we're on desktop linux, couldn't possibly bite us later :D
-  add_compile_definitions( VK_USE_PLATFORM_XLIB_KHR )
+  # add_compile_definitions( VK_USE_PLATFORM_XLIB_KHR )
   # add_compile_definitions( VK_USE_PLATFORM_LIB_XCB_KHR )
+  add_compile_definitions( USE_GLFW )
 endif()
 
 # Package/System requirements

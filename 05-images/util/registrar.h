@@ -1,7 +1,12 @@
 #ifndef REGISTRAR_H
 #define REGISTRAR_H
 
-#include <vulkan/vulkan.hpp>
+#ifdef USE_GLFW
+# define GLFW_INCLUDE_VULKAN
+# include <GLFW/glfw3.h>
+#endif
+// https://github.com/KhronosGroup/Vulkan-Hpp
+# include <vulkan/vulkan.hpp>
 
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 # include <X11/Xlib.h>
@@ -25,7 +30,7 @@ public:
   void tearDown();
 
   void ensureExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName);
-  vk::Instance& createVulkanInstance(std::string appName, uint32_t appVer, uint32_t apiVer = VK_API_VERSION_1_0);
+  vk::Instance& createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer = VK_API_VERSION_1_0);
   vk::Device& createLogicalDevice(vk::QueueFlags qFlags);
   uint32_t findQueue(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags);
 #ifdef VK_USE_PLATFORM_WIN32_KHR
@@ -36,12 +41,17 @@ public:
   uint32_t findPresentQueueXlib(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags, Display* dpy, VisualID vid);
   vk::Device& createLogicalDeviceWithPresentQueueXlib(vk::QueueFlags qFlags, Display* dpy, VisualID vid);
   vk::SurfaceKHR& createSurfaceXlib(Display* dpy, Window window);
-  vk::SwapchainKHR& createSwapChainXlib();
 #endif
 #ifdef VK_USE_PLATFORM_LIB_XCB_KHR
 #error "XCB support not implemented"
   uint32_t findPresentQueueXcb(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags);
 #endif
+#ifdef USE_GLFW
+  vk::SurfaceKHR& createSurfaceGLFW(GLFWwindow* window);
+#endif
+  vk::SwapchainKHR& createSwapChain();
+  void createSwapChainImageViews();
+
   vk::CommandPool& createCommandPool( vk::CommandPoolCreateFlags flags );
   vk::UniqueBuffer createBuffer( vk::DeviceSize size, vk::BufferUsageFlags usageFlags );
   /// Select a device memory heap based on flags (vk::MemoryRequirements::memoryTypeBits)
@@ -57,6 +67,13 @@ public:
   /// Flush memory/caches
   void flushMemoryRanges( vk::ArrayProxy<const vk::MappedMemoryRange> mem );
 
+#ifdef DEBUG
+  static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+      VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+      VkDebugUtilsMessageTypeFlagsEXT messageType,
+      const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+      void* pUserData);
+#endif
 
 
 
@@ -66,6 +83,8 @@ public:
   vk::PhysicalDevice& physicalDevice();
   uint32_t queueFamilyIndex();
   vk::Queue& queue();
+  vk::SwapchainKHR& swapChain();
+  std::vector<vk::Image>& swapChainImages();
   std::vector<vk::UniqueCommandPool>& commandPools();
 
   std::string physicalDeviceTypeToString( vk::PhysicalDeviceType type );
@@ -90,14 +109,22 @@ private:
 
   // TODO: Initially just 1 logical device and 1 queue
   vk::UniqueDevice mDevice;
-#ifdef VK_USE_PLATFORM_XLIB_KHR
   vk::UniqueSurfaceKHR mSurface;
   vk::UniqueSwapchainKHR mSwapChain;
+  vk::Format mSwapChainFormat;
   std::vector<vk::Image> mSwapChainImages;
-#endif
+  std::vector<vk::UniqueImageView> mSwapChainImageViews;
+
   uint32_t mQueueFamIndex = std::numeric_limits<uint32_t>::max();
   std::vector<vk::Queue> mQueues;
   std::vector<vk::UniqueCommandPool> mCommandPools;
+#ifdef DEBUG
+
+  vk::UniqueHandle<vk::DebugUtilsMessengerEXT, vk::DispatchLoaderDynamic> mDebugUtilsMessenger;
+#endif
+
+  vk::DispatchLoaderDynamic mDidl;
+
 };
 
 inline Registrar& Registrar::singleton() { return mReg; }
@@ -107,5 +134,7 @@ inline std::vector<vk::PhysicalDevice>& Registrar::physicalDevices() { return mP
 inline vk::PhysicalDevice& Registrar::physicalDevice() { return mPhysicalDevices.front(); }
 inline uint32_t Registrar::queueFamilyIndex() { return mQueueFamIndex; }
 inline vk::Queue& Registrar::queue() { return mQueues.front(); }
+inline vk::SwapchainKHR& Registrar::swapChain() { return mSwapChain.get(); }
+inline std::vector<vk::Image>& Registrar::swapChainImages() { return mSwapChainImages; }
 inline std::vector<vk::UniqueCommandPool>& Registrar::commandPools() { return mCommandPools; }
 #endif
