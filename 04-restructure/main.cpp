@@ -1,14 +1,12 @@
 
 #include "util/registrar.h"
+#include "util/simplebuffer.h"
 
 // https://github.com/KhronosGroup/Vulkan-Hpp
 #include <vulkan/vulkan.hpp>
 
 #include <iostream>
 #include <stdexcept>
-
-
-
 
 /// Populate a command buffer in order to copy data from source to dest
 void fillCB_CopyBufferObjects( vk::CommandBuffer& commandBuffer, vk::Buffer& src, vk::Buffer& dst, vk::DeviceSize srcOff, vk::DeviceSize dstOff, vk::DeviceSize size )
@@ -31,8 +29,6 @@ void fillCB_CopyBufferObjects( vk::CommandBuffer& commandBuffer, vk::Buffer& src
   // End the buffer
   commandBuffer.end();
 }
-
-
 
 int main(int argc, char* argv[])
 {
@@ -97,35 +93,26 @@ int main(int argc, char* argv[])
     // 2: Empty buffer to copy this data into
     std::string testData("Hello, World!");
     auto bufSize = testData.size() * sizeof(std::string::value_type);
-    vk::UniqueBuffer srcBuffer = reg.createBuffer(
+
+    SimpleBuffer srcBuffer(
           bufSize,
-          vk::BufferUsageFlagBits::eTransferSrc);
-    vk::UniqueBuffer dstBuffer = reg.createBuffer(
+          {vk::BufferUsageFlagBits::eTransferSrc},
+          {vk::MemoryPropertyFlagBits::eHostVisible}
+          );
+    SimpleBuffer dstBuffer(
           bufSize,
-          vk::BufferUsageFlagBits::eTransferDst);
+          {vk::BufferUsageFlagBits::eTransferDst},
+          {vk::MemoryPropertyFlagBits::eHostVisible}
+          );
 
-    // Allocate memory for the buffers
-    auto srcBufferMem = reg.allocateDeviceMemoryForBuffer(srcBuffer.get(), {vk::MemoryPropertyFlagBits::eHostVisible} );
-    auto dstBufferMem = reg.allocateDeviceMemoryForBuffer(dstBuffer.get(), {vk::MemoryPropertyFlagBits::eHostVisible} );
-
-    // Bind memory to the buffers
-    reg.bindMemoryToBuffer(srcBuffer.get(), srcBufferMem.get());
-    reg.bindMemoryToBuffer(dstBuffer.get(), dstBufferMem.get());
-
-    // Populate srcBuffer with our data
-    auto pSrcBuffer = reg.mapMemory( srcBufferMem.get(), 0, VK_WHOLE_SIZE);
+    auto pSrcBuffer = srcBuffer.map();
     std::memcpy(pSrcBuffer, testData.data(), bufSize);
-
-    // Unless the memory region has VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    // then we're responsible for flushing the cache after modifications/before reading
-    // TODO: This should check the memory buffer properties, meaning we need to store them in some kind of class
-    reg.flushMemoryRanges({vk::MappedMemoryRange(srcBufferMem.get(), 0, VK_WHOLE_SIZE)});
-    reg.unmapMemory(srcBufferMem.get());
-
+    srcBuffer.flush();
+    srcBuffer.unmap();
     std::cout << "Successfully setup buffers and mapped test data into source buffer" << std::endl;
 
     // Fill the command buffer with our commands
-    fillCB_CopyBufferObjects(commandBuffer.get(), srcBuffer.get(), dstBuffer.get(), 0, 0, bufSize);
+    fillCB_CopyBufferObjects(commandBuffer.get(), srcBuffer.buffer(), dstBuffer.buffer(), 0, 0, bufSize);
 
     // And submit the buffer to the queue to start doing stuff
     vk::SubmitInfo submitInfo(
@@ -145,10 +132,10 @@ int main(int argc, char* argv[])
 
     // Now read back from the destination buffer
     std::string dstString(bufSize, '\0');
-    auto pDstBuffer = reg.mapMemory( dstBufferMem.get(), 0, VK_WHOLE_SIZE );
-    reg.flushMemoryRanges({{dstBufferMem.get(), 0, VK_WHOLE_SIZE}});
+    auto pDstBuffer = dstBuffer.map();
+    dstBuffer.flush();
     std::memcpy(&dstString[0], pDstBuffer, bufSize);
-    reg.unmapMemory(dstBufferMem.get());
+    dstBuffer.unmap();
 
     std::cout << "Read string from dstBuffer: " << dstString << std::endl;
     if( testData != dstString ) throw std::runtime_error("ERORR: Failed to copy data from source -> dest buffer");
