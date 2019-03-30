@@ -61,10 +61,25 @@ int main(int argc, char* argv[])
     // To do this we also need to specify how many queues from which families we want to create
     // In this case just 1 queue from the first family which supports graphics
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    Display* dpy = XOpenDisplay(nullptr);
-    Visual*  vis = DefaultVisual(dpy, 0);
+    auto X11dpy = XOpenDisplay(nullptr);
+    auto X11vis = DefaultVisual(X11dpy, 0);
+    auto X11screen = DefaultScreen(X11dpy);
+    auto X11depth = DefaultDepth(X11dpy, 0);
+    XSetWindowAttributes X11WindowAttribs;
+    X11WindowAttribs.background_pixel = XWhitePixel(X11dpy, 0);
 
-    auto logicalDevice = reg.createLogicalDeviceWithPresentQueueXlib(vk::QueueFlagBits::eGraphics, dpy, XVisualIDFromVisual(vis));
+    auto X11Window = XCreateWindow(
+          X11dpy,
+          XRootWindow(X11dpy, 0),
+          0, 0, 800, 600, 0, X11depth,
+          InputOutput, X11vis, CWBackPixel,
+          &X11WindowAttribs );
+    XStoreName(X11dpy, X11Window, "Vulkan Experiment");
+    XSelectInput(X11dpy, X11Window, ExposureMask | StructureNotifyMask | KeyPressMask);
+    XMapWindow(X11dpy, X11Window);
+
+    auto logicalDevice = reg.createLogicalDeviceWithPresentQueueXlib(vk::QueueFlagBits::eGraphics, X11dpy, XVisualIDFromVisual(X11vis));
+ //   auto logicalDevice = reg.createLogicalDevice(vk::QueueFlagBits::eGraphics);
 #else
 # error "Code path not implemented"
 #endif
@@ -159,6 +174,18 @@ int main(int argc, char* argv[])
       std::cout << "Read string from dstBuffer: " << dstString << std::endl;
       if( testData != dstString ) throw std::runtime_error("ERORR: Failed to copy data from source -> dest buffer");
     }
+
+    while (true) {
+        XEvent ev;
+        XNextEvent(X11dpy, &ev);
+        if (ev.type == Expose) {
+           //XFillRectangle(X11dpy, X11Window, DefaultGC(X11dpy, X11screen), 20, 20, 10, 10);
+        }
+        if (ev.type == KeyPress)
+           break;
+     }
+
+    XCloseDisplay(X11dpy);
 
     reg.tearDown();
 

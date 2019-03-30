@@ -230,14 +230,31 @@ uint32_t Registrar::findPresentQueueXlib(vk::PhysicalDevice& device, vk::QueueFl
   for( auto i = 0u; i < qFamProps.size(); ++i ) {
     auto& p = qFamProps[i];
     if( !(p.queueFlags & requiredFlags) ) continue;
-    if( device.getXlibPresentationSupportKHR(i, dpy, vid)) qIdx = i; break;
+    if( device.getXlibPresentationSupportKHR(i, dpy, vid)) {
+      qIdx = i;
+      break;
+    }
   }
   return qIdx;
 }
 
 vk::Device& Registrar::createLogicalDeviceWithPresentQueueXlib(vk::QueueFlags qFlags, Display* dpy, VisualID vid) {
   mQueueFamIndex = findPresentQueueXlib( mPhysicalDevices.front(), qFlags, dpy, vid);
-  return createLogicalDevice();
+
+  auto& result = createLogicalDevice();
+
+  return result;
+}
+
+vk::SurfaceKHR& Registrar::createSurfaceXlib(Display* dpy, Window window) {
+  vk::XlibSurfaceCreateInfoKHR info(
+        vk::XlibSurfaceCreateFlagsKHR(),
+        dpy,
+        window
+        );
+
+  mSurface = mInstance->createXlibSurfaceKHRUnique(info);
+  return mSurface.get();
 }
 
 std::string Registrar::physicalDeviceTypeToString( vk::PhysicalDeviceType type ) {

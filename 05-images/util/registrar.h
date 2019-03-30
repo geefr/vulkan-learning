@@ -35,6 +35,7 @@ public:
 #ifdef VK_USE_PLATFORM_XLIB_KHR
   uint32_t findPresentQueueXlib(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags, Display* dpy, VisualID vid);
   vk::Device& createLogicalDeviceWithPresentQueueXlib(vk::QueueFlags qFlags, Display* dpy, VisualID vid);
+  vk::SurfaceKHR& createSurfaceXlib(Display* dpy, Window window);
 #endif
 #ifdef VK_USE_PLATFORM_LIB_XCB_KHR
 #error "XCB support not implemented"
@@ -88,6 +89,9 @@ private:
 
   // TODO: Initially just 1 logical device and 1 queue
   vk::UniqueDevice mDevice;
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+  vk::UniqueSurfaceKHR mSurface;
+#endif
   uint32_t mQueueFamIndex = std::numeric_limits<uint32_t>::max();
   std::vector<vk::Queue> mQueues;
   std::vector<vk::UniqueCommandPool> mCommandPools;
