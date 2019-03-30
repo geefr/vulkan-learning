@@ -20,4 +20,4 @@ find_package(Vulkan REQUIRED)
 add_subdirectory( 01-initialisation )
 add_subdirectory( 02-create-logical-device )
 add_subdirectory( 03-device-queues )
-
+add_subdirectory( 04-restructure )
