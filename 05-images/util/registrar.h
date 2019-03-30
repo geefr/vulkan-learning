@@ -3,6 +3,10 @@
 
 #include <vulkan/vulkan.hpp>
 
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+# include <X11/Xlib.h>
+#endif
+
 /**
  * Probably the wrong name for this
  * Basically a big singleton for storing
@@ -20,9 +24,22 @@ public:
 
   void tearDown();
 
+  void ensureInstanceExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName);
   vk::Instance& createVulkanInstance(std::string appName, uint32_t appVer, uint32_t apiVer = VK_API_VERSION_1_0);
   vk::Device& createLogicalDevice(vk::QueueFlags qFlags);
   uint32_t findQueue(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags);
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+#error "Win32 support not implemented"
+  uint32_t findPresentQueueWin32(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags)
+#endif
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+  uint32_t findPresentQueueXlib(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags, Display* dpy, VisualID vid);
+  vk::Device& createLogicalDeviceWithPresentQueueXlib(vk::QueueFlags qFlags, Display* dpy, VisualID vid);
+#endif
+#ifdef VK_USE_PLATFORM_LIB_XCB_KHR
+#error "XCB support not implemented"
+  uint32_t findPresentQueueXcb(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags);
+#endif
   vk::CommandPool& createCommandPool( vk::CommandPoolCreateFlags flags );
   vk::UniqueBuffer createBuffer( vk::DeviceSize size, vk::BufferUsageFlags usageFlags );
   /// Select a device memory heap based on flags (vk::MemoryRequirements::memoryTypeBits)
@@ -62,6 +79,9 @@ private:
   ~Registrar();
 
   static Registrar mReg;
+
+  /// Don't call unless mQueueFamIndex is set
+  vk::Device& createLogicalDevice();
 
   vk::UniqueInstance mInstance;
   std::vector<vk::PhysicalDevice> mPhysicalDevices;

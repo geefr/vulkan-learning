@@ -5,6 +5,10 @@
 // https://github.com/KhronosGroup/Vulkan-Hpp
 #include <vulkan/vulkan.hpp>
 
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+# include <X11/Xlib.h>
+#endif
+
 #include <iostream>
 #include <stdexcept>
 
@@ -56,7 +60,15 @@ int main(int argc, char* argv[])
     // Create a logical device to interact with
     // To do this we also need to specify how many queues from which families we want to create
     // In this case just 1 queue from the first family which supports graphics
-    auto logicalDevice = reg.createLogicalDevice( vk::QueueFlagBits::eGraphics );
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+    Display* dpy = XOpenDisplay(nullptr);
+    Visual*  vis = DefaultVisual(dpy, 0);
+
+    auto logicalDevice = reg.createLogicalDeviceWithPresentQueueXlib(vk::QueueFlagBits::eGraphics, dpy, XVisualIDFromVisual(vis));
+#else
+# error "Code path not implemented"
+#endif
+
     std::cout << "Created a logical device: " << std::hex << reinterpret_cast<uint64_t>(&(logicalDevice)) << std::endl;
 
     // Get the queue from the device

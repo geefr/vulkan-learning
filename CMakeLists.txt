@@ -14,6 +14,17 @@ if( CMAKE_BUILD_TYPE MATCHES "Debug" )
   add_compile_definitions( DEBUG )
 endif()
 
+# Enable presentation surfaces
+if( MSVC )
+  add_compile_definitions( VK_USE_PLATFORM_WIN32_KHR )
+else()
+  find_package(X11 REQUIRED)
+
+  # Just assume we're on desktop linux, couldn't possibly bite us later :D
+  add_compile_definitions( VK_USE_PLATFORM_XLIB_KHR )
+  # add_compile_definitions( VK_USE_PLATFORM_LIB_XCB_KHR )
+endif()
+
 # Package/System requirements
 find_package(Vulkan REQUIRED)
 

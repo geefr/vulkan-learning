@@ -25,7 +25,33 @@ void Registrar::tearDown() {
   mInstance.release();
 }
 
+void Registrar::ensureInstanceExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName) {
+  if( std::find_if(extensions.begin(), extensions.end(), [&](auto& e) {
+    return e.extensionName == extensionName;
+  }) == extensions.end()) throw std::runtime_error("Instance extension not supported: " + extensionName);
+}
+
 vk::Instance& Registrar::createVulkanInstance(std::string appName, uint32_t appVer, uint32_t apiVer) {
+  // First let's validate whether the extensions we need are available
+  // If not there's no point doing anything and the system can't support the program
+  // Assume that if presentation extensions are enabled at compile time then they're
+  // required
+  // TODO: If there's multiple possibilities such as on Linux then maybe we need something more complicated
+  auto supportedExtensions = vk::enumerateInstanceExtensionProperties();
+
+  std::vector<const char*> enabledInstanceExtensions;
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+  ensureInstanceExtension(supportedExtensions, "TODO");
+#endif
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+  ensureInstanceExtension(supportedExtensions, "VK_KHR_xlib_surface");
+  enabledInstanceExtensions.push_back("VK_KHR_surface");
+  enabledInstanceExtensions.push_back("VK_KHR_xlib_surface");
+#endif
+#ifdef VK_USE_PLATFORM_LIB_XCB_KHR
+  ensureInstanceExtension(supportedExtensions, "TODO");
+#endif
+
   vk::ApplicationInfo applicationInfo(
         appName.c_str(), // Application Name
         appVer, // Application version
@@ -49,13 +75,11 @@ vk::Instance& Registrar::createVulkanInstance(std::string appName, uint32_t appV
         &applicationInfo, // Application Info
         enabledLayerCount, // enabledLayerCount - don't need any validation layers right now
         enabledLayerNames, // ppEnabledLayerNames
-        0, // enabledExtensionCount - don't need any extensions yet. In vulkan these need to be requested on init unlike in gl
-        nullptr // ppEnabledExtensionNames
+        static_cast<uint32_t>(enabledInstanceExtensions.size()), // enabledExtensionCount. In vulkan these need to be requested on init unlike in gl
+        enabledInstanceExtensions.data() // ppEnabledExtensionNames
         );
 
   mInstance = vk::createInstanceUnique(instanceCreateInfo);
-
-
 
   mPhysicalDevices = mInstance->enumeratePhysicalDevices();
   if( mPhysicalDevices.empty() ) throw std::runtime_error("Failed to enumerate physical devices");
@@ -78,8 +102,11 @@ vk::Instance& Registrar::createVulkanInstance(std::string appName, uint32_t appV
 
 vk::Device& Registrar::createLogicalDevice(vk::QueueFlags qFlags ) {
   mQueueFamIndex = findQueue(mPhysicalDevices.front(), qFlags);
-  if( mQueueFamIndex > mPhysicalDevices.size() ) throw std::runtime_error("createLogicalDevice: Physical device doesn't support required queue types");
+  return createLogicalDevice();
+}
 
+vk::Device& Registrar::createLogicalDevice() {
+  if( mQueueFamIndex > mPhysicalDevices.size() ) throw std::runtime_error("createLogicalDevice: Physical device doesn't support required queue types");
   float queuePriorities = 1.f;
   vk::DeviceQueueCreateInfo queueInfo(
         vk::DeviceQueueCreateFlags(),
@@ -193,6 +220,24 @@ uint32_t Registrar::findQueue(vk::PhysicalDevice& device, vk::QueueFlags require
   });
   if( it == qFamProps.end() ) return std::numeric_limits<uint32_t>::max();
   return it - qFamProps.begin();
+}
+
+uint32_t Registrar::findPresentQueueXlib(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags, Display* dpy, VisualID vid)
+{
+  auto qFamProps = device.getQueueFamilyProperties();
+
+  uint32_t qIdx = std::numeric_limits<uint32_t>::max();
+  for( auto i = 0u; i < qFamProps.size(); ++i ) {
+    auto& p = qFamProps[i];
+    if( !(p.queueFlags & requiredFlags) ) continue;
+    if( device.getXlibPresentationSupportKHR(i, dpy, vid)) qIdx = i; break;
+  }
+  return qIdx;
+}
+
+vk::Device& Registrar::createLogicalDeviceWithPresentQueueXlib(vk::QueueFlags qFlags, Display* dpy, VisualID vid) {
+  mQueueFamIndex = findPresentQueueXlib( mPhysicalDevices.front(), qFlags, dpy, vid);
+  return createLogicalDevice();
 }
 
 std::string Registrar::physicalDeviceTypeToString( vk::PhysicalDeviceType type ) {
