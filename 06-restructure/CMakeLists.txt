@@ -11,6 +11,8 @@ add_executable(${targetName} main.cpp
   util/windowintegration.cpp
   util/framebuffer.h
   util/framebuffer.cpp
+  util/deviceinstance.h
+  util/deviceinstance.cpp
 	)
 target_link_libraries( ${targetName} Vulkan::Vulkan glfw ${X11_LIBRARIES} )
 

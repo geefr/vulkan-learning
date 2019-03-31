@@ -64,10 +64,10 @@ private:
       const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
       std::vector<const char*> requiredExtensions;
       for(uint32_t i = 0; i < glfwExtensionCount; ++i ) requiredExtensions.push_back(glfwExtensions[i]);
-      mInstance = reg.createVulkanInstance(requiredExtensions, "vulkan-experiments", 1);
+      reg.mDeviceInstance.reset(new AppDeviceInstance(requiredExtensions, {}, "vulkan-experiments", 1));
     }
 
-    mPDevice = reg.physicalDevice();
+    mPDevice = reg.mDeviceInstance->physicalDevice();
 
     // Find out what queues are available
     //auto queueFamilyProps = dev.getQueueFamilyProperties();
@@ -77,18 +77,18 @@ private:
     // To do this we also need to specify how many queues from which families we want to create
     // In this case just 1 queue from the first family which supports graphics
 
-    mDevice = reg.createLogicalDevice(vk::QueueFlagBits::eGraphics);
-    reg.mWindowIntegration.reset(new WindowIntegration(reg.instance(), reg.physicalDevice(), reg.queueFamilyIndex(), reg.device(), mWindow));
+    mDevice = reg.mDeviceInstance->device();
+    reg.mWindowIntegration.reset(new WindowIntegration(reg.mDeviceInstance->instance(), reg.mDeviceInstance->physicalDevice(), reg.mDeviceInstance->queueFamilyIndex(), reg.mDeviceInstance->device(), mWindow));
 
     // Get the queue from the device
     // queues are the thing that actually do the work
     // could be a subprocessor on the device, or some other subsection of capability
-    mGraphicsQueue = reg.queue();
-    mPresentQueue = reg.queue(); // Intentionally the same at first, shouldn't be doing it like this really as there's a chance we don't have 1 queue that supports both graphics and present
+    mGraphicsQueue = reg.mDeviceInstance->queue();
+    mPresentQueue = reg.mDeviceInstance->queue(); // Intentionally the same at first, shouldn't be doing it like this really as there's a chance we don't have 1 queue that supports both graphics and present
 
     reg.createRenderPass();
     reg.createGraphicsPipeline();
-    reg.mFrameBuffer.reset(new FrameBuffer(reg.device(), *reg.mWindowIntegration.get(), reg.renderPass()));
+    reg.mFrameBuffer.reset(new FrameBuffer(reg.mDeviceInstance->device(), *reg.mWindowIntegration.get(), reg.renderPass()));
 
     // Setup our sync primitives
     // imageAvailable - gpu: Used to stall the pipeline until the presentation has finished reading from the image
@@ -117,7 +117,7 @@ private:
          .setLevel(vk::CommandBufferLevel::ePrimary)
          ;
 
-    mCommandBuffers = reg.device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
+    mCommandBuffers = reg.mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
 
     for( auto i = 0u; i < mCommandBuffers.size(); ++i ) {
       auto commandBuffer = mCommandBuffers[i].get();

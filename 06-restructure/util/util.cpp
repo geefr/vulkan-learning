@@ -85,9 +85,6 @@ void Util::printQueueFamilyProperties( std::vector<vk::QueueFamilyProperties>& p
   }
 }
 
-
-
-
 VKAPI_ATTR VkBool32 VKAPI_CALL Util::debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -105,6 +102,16 @@ void Util::ensureExtension(const std::vector<vk::ExtensionProperties>& extension
   if( std::find_if(extensions.begin(), extensions.end(), [&](auto& e) {
                    return e.extensionName == extensionName;
 }) == extensions.end()) throw std::runtime_error("Extension not supported: " + extensionName);
+}
+
+uint32_t Util::findQueue(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags) {
+  auto qFamProps = device.getQueueFamilyProperties();
+  auto it = std::find_if(qFamProps.begin(), qFamProps.end(), [&](auto& p) {
+    if( p.queueFlags & requiredFlags ) return true;
+    return false;
+  });
+  if( it == qFamProps.end() ) return std::numeric_limits<uint32_t>::max();
+  return it - qFamProps.begin();
 }
 
 

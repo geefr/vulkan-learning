@@ -22,7 +22,7 @@ void Registrar::tearDown() {
   // Initially thought the smart pointers would
   // be best but might be hard to sort out
   // cleanup order in that case..
-  mDevice->waitIdle();
+  mDeviceInstance->waitAllDevicesIdle();
 
   mFrameBuffer.release();
   mGraphicsPipeline.release();
@@ -30,160 +30,15 @@ void Registrar::tearDown() {
   mRenderPass.release();
   mWindowIntegration.release();
   for( auto& p : mCommandPools ) p.release();
-  mDevice.release();
-
   Util::release();
 
-  mInstance.release();
-
+  mDeviceInstance.release();
 }
 
-
-vk::Instance& Registrar::createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer) {
-  // First let's validate whether the extensions we need are available
-  // If not there's no point doing anything and the system can't support the program
-  // Assume that if presentation extensions are enabled at compile time then they're
-  // required
-  // TODO: If there's multiple possibilities such as on Linux then maybe we need something more complicated
-  auto supportedExtensions = vk::enumerateInstanceExtensionProperties();
-
-  std::vector<const char*> enabledInstanceExtensions = requiredExtensions;
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-  ensureInstanceExtension(supportedExtensions, "TODO");
-#endif
-#ifdef VK_USE_PLATFORM_XLIB_KHR
-  enabledInstanceExtensions.push_back("VK_KHR_surface");
-  enabledInstanceExtensions.push_back("VK_KHR_xlib_surface");
-
-#endif
-#ifdef VK_USE_PLATFORM_LIB_XCB_KHR
-  ensureInstanceExtension(supportedExtensions, "TODO");
-#endif
-
-
-  vk::ApplicationInfo applicationInfo(
-        appName.c_str(), // Application Name
-        appVer, // Application version
-        "geefr", // engine name
-        1, // engine version
-        apiVer // absolute minimum vulkan api
-        );
-
-#ifdef DEBUG
-  uint32_t enabledLayerCount = 1;
-  const char* const enabledLayerNames[] = {
-    "VK_LAYER_LUNARG_standard_validation",
-  };
-  enabledInstanceExtensions.push_back("VK_EXT_debug_utils");
-
-#else
-  uint32_t enabledLayerCount = 0;
-  const char* const* enabledLayerNames = nullptr;
-#endif
-
-  for( auto& e : enabledInstanceExtensions ) Util::ensureExtension(supportedExtensions, e);
-  vk::InstanceCreateInfo instanceCreateInfo(
-        vk::InstanceCreateFlags(),
-        &applicationInfo, // Application Info
-        enabledLayerCount, // enabledLayerCount - don't need any validation layers right now
-        enabledLayerNames, // ppEnabledLayerNames
-        static_cast<uint32_t>(enabledInstanceExtensions.size()), // enabledExtensionCount. In vulkan these need to be requested on init unlike in gl
-        enabledInstanceExtensions.data() // ppEnabledExtensionNames
-        );
-
-  mInstance = vk::createInstanceUnique(instanceCreateInfo);
-
-#ifdef DEBUG
-  Util::initDidl(mInstance.get());
-  Util::initDebugMessenger(mInstance.get());
-#endif
-
-  mPhysicalDevices = mInstance->enumeratePhysicalDevices();
-  if( mPhysicalDevices.empty() ) throw std::runtime_error("Failed to enumerate physical devices");
-
-  // Device order in the list isn't guaranteed, likely the integrated gpu is first
-  // So why don't we fix that? As we're using the C++ api we can just sort the vector
-  std::sort(mPhysicalDevices.begin(), mPhysicalDevices.end(), [&](auto& a, auto& b) {
-    vk::PhysicalDeviceProperties propsA;
-    a.getProperties(&propsA);
-    vk::PhysicalDeviceProperties propsB;
-    b.getProperties(&propsB);
-    // For now just ensure discrete GPUs are first, then order by support vulkan api version
-    if( propsA.deviceType == vk::PhysicalDeviceType::eDiscreteGpu ) return true;
-    if( propsA.apiVersion > propsB.apiVersion ) return true;
-    return false;
-  });
-
-  return mInstance.get();
-}
-
-vk::Device& Registrar::createLogicalDevice(vk::QueueFlags qFlags ) {
-  mQueueFamIndex = findQueue(mPhysicalDevices.front(), qFlags);
-  return createLogicalDevice();
-}
-
-vk::Device& Registrar::createLogicalDevice() {
-  if( mQueueFamIndex > mPhysicalDevices.size() ) throw std::runtime_error("createLogicalDevice: Physical device doesn't support required queue types");
-
-  auto supportedExtensions = mPhysicalDevices.front().enumerateDeviceExtensionProperties();
-  std::vector<const char*> enabledDeviceExtensions;
-#if defined(VK_USE_PLATFORM_WIN32_KHR) || defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_LIB_XCB_KHR) || defined(USE_GLFW)
-  enabledDeviceExtensions.push_back("VK_KHR_swapchain");
-  for( auto& e : enabledDeviceExtensions ) Util::ensureExtension(supportedExtensions, e);
-#endif
-
-#ifdef DEBUG
-  uint32_t enabledLayerCount = 1;
-  const char* const enabledLayerNames[] = {
-    "VK_LAYER_LUNARG_standard_validation",
-  };
-
-#else
-  uint32_t enabledLayerCount = 0;
-  const char* const* enabledLayerNames = nullptr;
-#endif
-
-  float queuePriorities = 1.f;
-  vk::DeviceQueueCreateInfo queueInfo(
-        vk::DeviceQueueCreateFlags(),
-        mQueueFamIndex, // Queue family index
-        1, // Number of queues to create
-        &queuePriorities // Priorities of each queue
-        );
-
-  // The features of the physical device
-  vk::PhysicalDeviceFeatures deviceSupportedFeatures;
-  mPhysicalDevices.front().getFeatures(&deviceSupportedFeatures);
-
-  // The features we require, we get very little without requesting these
-  // As listed page 17
-  // TODO: After creation the enabled features are set in this struct, will want to keep it for later
-  vk::PhysicalDeviceFeatures deviceRequiredFeatures;
-  deviceRequiredFeatures.multiDrawIndirect = deviceSupportedFeatures.multiDrawIndirect;
-  deviceRequiredFeatures.tessellationShader = true;
-  deviceRequiredFeatures.geometryShader = true;
-
-  vk::DeviceCreateInfo info(
-        vk::DeviceCreateFlags(),
-        1, // Queue create info count
-        &queueInfo, // Queue create info structs
-        enabledLayerCount, // Enabled layer count
-        enabledLayerNames, // Enabled layers
-        static_cast<uint32_t>(enabledDeviceExtensions.size()), // Enabled extension count
-        enabledDeviceExtensions.data(), // Enabled extensions
-        &deviceRequiredFeatures // Physical device features
-        );
-
-  mDevice = mPhysicalDevices.front().createDeviceUnique(info);
-
-  mQueues.emplace_back( mDevice->getQueue(mQueueFamIndex, 0) );
-
-  return mDevice.get();
-}
 
 vk::CommandPool& Registrar::createCommandPool( vk::CommandPoolCreateFlags flags ) {
-  vk::CommandPoolCreateInfo info(flags, mQueueFamIndex); // TODO: Hack! should be passed by caller/some reference to the command queue class we don't have yet
-  mCommandPools.emplace_back(mDevice->createCommandPoolUnique(info));
+  vk::CommandPoolCreateInfo info(flags, mDeviceInstance->queueFamilyIndex()); // TODO: Hack! should be passed by caller/some reference to the command queue class we don't have yet
+  mCommandPools.emplace_back(mDeviceInstance->device().createCommandPoolUnique(info));
   return mCommandPools.back().get();
 }
 
@@ -194,13 +49,13 @@ vk::UniqueBuffer Registrar::createBuffer( vk::DeviceSize size, vk::BufferUsageFl
         size,
         usageFlags
         );
-  return mDevice->createBufferUnique(info);
+  return mDeviceInstance->device().createBufferUnique(info);
 }
 
 /// Select a device memory heap based on flags (vk::MemoryRequirements::memoryTypeBits)
 uint32_t Registrar::selectDeviceMemoryHeap( vk::MemoryRequirements memoryRequirements, vk::MemoryPropertyFlags requiredFlags ) {
   // Initial implementation doesn't have any real requirements, just select the first compatible heap
-  vk::PhysicalDeviceMemoryProperties memoryProperties = mPhysicalDevices.front().getMemoryProperties();
+  vk::PhysicalDeviceMemoryProperties memoryProperties = mDeviceInstance->physicalDevice().getMemoryProperties();
 
   for(uint32_t memType = 0u; memType < 32; ++memType) {
     uint32_t memTypeBit = 1 << memType;
@@ -217,7 +72,7 @@ uint32_t Registrar::selectDeviceMemoryHeap( vk::MemoryRequirements memoryRequire
 /// Allocate device memory suitable for the specified buffer
 vk::UniqueDeviceMemory Registrar::allocateDeviceMemoryForBuffer( vk::Buffer& buffer, vk::MemoryPropertyFlags userReqs ) {
   // Find out what kind of memory the buffer needs
-  vk::MemoryRequirements memReq = mDevice->getBufferMemoryRequirements(buffer);
+  vk::MemoryRequirements memReq = mDeviceInstance->device().getBufferMemoryRequirements(buffer);
 
   auto heapIdx = selectDeviceMemoryHeap(memReq, userReqs );
 
@@ -225,75 +80,28 @@ vk::UniqueDeviceMemory Registrar::allocateDeviceMemoryForBuffer( vk::Buffer& buf
         memReq.size,
         heapIdx);
 
-  return mDevice->allocateMemoryUnique(info);
+  return mDeviceInstance->device().allocateMemoryUnique(info);
 }
 
 /// Bind memory to a buffer
 void Registrar::bindMemoryToBuffer(vk::Buffer& buffer, vk::DeviceMemory& memory, vk::DeviceSize offset) {
-  mDevice->bindBufferMemory(buffer, memory, offset);
+  mDeviceInstance->device().bindBufferMemory(buffer, memory, offset);
 }
 
 /// Map a region of device memory to host memory
 void* Registrar::mapMemory( vk::DeviceMemory& deviceMem, vk::DeviceSize offset, vk::DeviceSize size ) {
-  return mDevice->mapMemory(deviceMem, offset, size);
+  return mDeviceInstance->device().mapMemory(deviceMem, offset, size);
 }
 
 /// Unmap a region of device memory
 void Registrar::unmapMemory( vk::DeviceMemory& deviceMem ) {
-  mDevice->unmapMemory(deviceMem);
+  mDeviceInstance->device().unmapMemory(deviceMem);
 }
 
 /// Flush memory/caches
 void Registrar::flushMemoryRanges( vk::ArrayProxy<const vk::MappedMemoryRange> mem ) {
-  mDevice->flushMappedMemoryRanges(mem.size(), mem.data());
+  mDeviceInstance->device().flushMappedMemoryRanges(mem.size(), mem.data());
 }
-
-uint32_t Registrar::findQueue(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags) {
-  auto qFamProps = device.getQueueFamilyProperties();
-  auto it = std::find_if(qFamProps.begin(), qFamProps.end(), [&](auto& p) {
-    if( p.queueFlags & requiredFlags ) return true;
-    return false;
-  });
-  if( it == qFamProps.end() ) return std::numeric_limits<uint32_t>::max();
-  return it - qFamProps.begin();
-}
-
-#ifdef VK_USE_PLATFORM_XLIB_KHR
-uint32_t Registrar::findPresentQueueXlib(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags, Display* dpy, VisualID vid)
-{
-  auto qFamProps = device.getQueueFamilyProperties();
-
-  uint32_t qIdx = std::numeric_limits<uint32_t>::max();
-  for( auto i = 0u; i < qFamProps.size(); ++i ) {
-    auto& p = qFamProps[i];
-    if( !(p.queueFlags & requiredFlags) ) continue;
-    if( device.getXlibPresentationSupportKHR(i, dpy, vid)) {
-      qIdx = i;
-      break;
-    }
-  }
-  return qIdx;
-}
-
-vk::Device& Registrar::createLogicalDeviceWithPresentQueueXlib(vk::QueueFlags qFlags, Display* dpy, VisualID vid) {
-  mQueueFamIndex = findPresentQueueXlib( mPhysicalDevices.front(), qFlags, dpy, vid);
-
-  auto& result = createLogicalDevice();
-
-  return result;
-}
-
-vk::SurfaceKHR& Registrar::createSurfaceXlib(Display* dpy, Window window) {
-  vk::XlibSurfaceCreateInfoKHR info(
-        vk::XlibSurfaceCreateFlagsKHR(),
-        dpy,
-        window
-        );
-
-  mSurface = mInstance->createXlibSurfaceKHRUnique(info);
-  return mSurface.get();
-}
-#endif
 
 
 void Registrar::createRenderPass() {
@@ -361,7 +169,7 @@ void Registrar::createRenderPass() {
       .setPDependencies(&dep)
       ;
 
-  mRenderPass = mDevice->createRenderPassUnique(renderPassInfo);
+  mRenderPass = mDeviceInstance->device().createRenderPassUnique(renderPassInfo);
 }
 
 void Registrar::createGraphicsPipeline() {
@@ -480,7 +288,7 @@ void Registrar::createGraphicsPipeline() {
       .setPPushConstantRanges(nullptr)
       ;
 
-  mPipelineLayout = mDevice->createPipelineLayoutUnique(layoutInfo);
+  mPipelineLayout = mDeviceInstance->device().createPipelineLayoutUnique(layoutInfo);
 
 
   // Finally let's make the pipeline itself
@@ -503,7 +311,7 @@ void Registrar::createGraphicsPipeline() {
       ;
 
 
-  mGraphicsPipeline = mDevice->createGraphicsPipelineUnique({}, pipelineInfo);
+  mGraphicsPipeline = mDeviceInstance->device().createGraphicsPipelineUnique({}, pipelineInfo);
 
   // Shader modules deleted here, only needed for pipeline init
 }
@@ -530,5 +338,5 @@ vk::UniqueShaderModule Registrar::createShaderModule(const std::string& fileName
         shaderCode.size(),
         reinterpret_cast<const uint32_t*>(shaderCode.data())
         );
-  return mDevice->createShaderModuleUnique(info);
+  return mDeviceInstance->device().createShaderModuleUnique(info);
 }

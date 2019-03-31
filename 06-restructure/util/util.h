@@ -14,6 +14,7 @@ public:
   static void printDetailedPhysicalDeviceInfo( vk::PhysicalDevice& device );
   static void printQueueFamilyProperties( std::vector<vk::QueueFamilyProperties>& props );
   static void ensureExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName);
+  static uint32_t findQueue(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags);
 
 #ifdef DEBUG
   static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
