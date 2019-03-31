@@ -30,4 +30,7 @@ endif()
 # Package/System requirements
 find_package(Vulkan REQUIRED)
 
-add_subdirectory( 06-restructure )
+set( VULKANUTILS_LIB_TYPE STATIC )
+
+add_subdirectory( vulkanutils )
+add_subdirectory( tests )
