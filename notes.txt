@@ -1,0 +1,35 @@
+06 - restructure
+================
+
+Functional blocks to be split into classes:
+
+- Instance setup
+  - device creation
+  - queue creation
+  - command pool creation
+
+- The window/WSI integration bits/render target
+  - swapchain creation
+  - swapchain images
+  
+  - Requires instance/device
+
+- framebuffers
+  - Can't be in WSI stuff as the render pass needs to be setup in between
+  - class taking references to wsi stuff and the render pass info I guess
+
+- pipeline setup
+  - render pass stuff included here for now?
+  - basic to start with - just what we've got but better layout
+  - needs extent of swapchain
+  
+- Overall registrar
+  - Holds 1 or more of each of the others, and deals with init/destruction calls from application?
+  - So basically splitting the existing registrar class down into separate bits
+
+- Util
+  - utility methods at the bottom of registrar
+  - shader reading methods
+  - Small functions for creating each type/doing the logic
+  - debug callback/setup
+  - Didl

@@ -7,6 +7,10 @@ add_executable(${targetName} main.cpp
 	util/simplebuffer.cpp
   util/util.h
   util/util.cpp
+  util/windowintegration.h
+  util/windowintegration.cpp
+  util/framebuffer.h
+  util/framebuffer.cpp
 	)
 target_link_libraries( ${targetName} Vulkan::Vulkan glfw ${X11_LIBRARIES} )
 

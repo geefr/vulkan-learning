@@ -24,13 +24,11 @@ void Registrar::tearDown() {
   // cleanup order in that case..
   mDevice->waitIdle();
 
-  for( auto& f : mSwapChainFrameBuffers ) f.release(); // Before image views and render pass
+  mFrameBuffer.release();
   mGraphicsPipeline.release();
   mPipelineLayout.release();
   mRenderPass.release();
-  for( auto& iv : mSwapChainImageViews ) iv.release();
-  mSwapChain.release();
-  mSurface.release();
+  mWindowIntegration.release();
   for( auto& p : mCommandPools ) p.release();
   mDevice.release();
 
@@ -297,95 +295,11 @@ vk::SurfaceKHR& Registrar::createSurfaceXlib(Display* dpy, Window window) {
 }
 #endif
 
-#ifdef USE_GLFW
-vk::SurfaceKHR& Registrar::createSurfaceGLFW(GLFWwindow* window) {
-  VkSurfaceKHR surface;
-  if(glfwCreateWindowSurface(mInstance.get(), window, nullptr, &surface) != VK_SUCCESS) {
-    throw std::runtime_error("createSurfaceGLFW: Failed to create window surface");
-  }
-
-  mSurface.reset(surface);
-  return mSurface.get();
-}
-#endif
-
-
-vk::SwapchainKHR& Registrar::createSwapChain() {
-  if( !mPhysicalDevices.front().getSurfaceSupportKHR(mQueueFamIndex, mSurface.get()) ) throw std::runtime_error("createSwapChainXlib: Physical device doesn't support surfaces");
-
-  // Parameters used in swapchain must comply with limits of the surface
-  auto caps = mPhysicalDevices.front().getSurfaceCapabilitiesKHR(mSurface.get());
-
-  // First the number of images (none, double, triple buffered)
-  auto numImages = 3u;
-  while( numImages > caps.maxImageCount ) numImages--;
-  if( numImages != 3u ) std::cerr << "Creating swapchain with " << numImages << " images" << std::endl;
-  if( numImages < caps.minImageCount ) throw std::runtime_error("Unable to create swapchain, invalid num images");
-
-  // Ideally we want full alpha support
-  auto alphaMode = vk::CompositeAlphaFlagBitsKHR::ePostMultiplied; // TODO: Pre or post? can't remember the difference
-  if( !(caps.supportedCompositeAlpha & alphaMode) ) {
-    std::cerr << "Surface doesn't support full alpha, falling back" << std::endl;
-    alphaMode = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-  }
-
-  auto imageUsage = vk::ImageUsageFlags(vk::ImageUsageFlagBits::eColorAttachment);
-  if( !(caps.supportedUsageFlags & imageUsage) ) throw std::runtime_error("Surface doesn't support color attachment");
-
-  // caps.maxImageArrayLayers;
-  // caps.minImageExtent;
-  // caps.currentTransform;
-  // caps.supportedTransforms;
-
-  // Choose a pixel format
-  auto surfaceFormats = mPhysicalDevices.front().getSurfaceFormatsKHR(mSurface.get());
-  // TODO: Just choosing the first one here..
-  mSwapChainFormat = surfaceFormats.front().format;
-  auto chosenColourSpace = surfaceFormats.front().colorSpace;
-  mSwapChainExtent = caps.currentExtent;
-  vk::SwapchainCreateInfoKHR info(
-        vk::SwapchainCreateFlagsKHR(),
-        mSurface.get(),
-        numImages, // Num images in the swapchain
-        mSwapChainFormat, // Pixel format
-        chosenColourSpace, // Colour space
-        mSwapChainExtent, // Size of window
-        1, // Image array layers
-        imageUsage, // Image usage flags
-        vk::SharingMode::eExclusive, 0, nullptr, // Exclusive use by one queue
-        caps.currentTransform, // flip/rotate before presentation
-        alphaMode, // How alpha is mapped
-        vk::PresentModeKHR::eFifo, // vsync (mailbox is vsync or faster, fifo is vsync)
-        true, // Clipped - For cases where part of window doesn't need to be rendered/is offscreen
-        vk::SwapchainKHR() // The old swapchain to delete
-        );
-
-  mSwapChain = mDevice->createSwapchainKHRUnique(info);
-
-  mSwapChainImages = mDevice->getSwapchainImagesKHR(mSwapChain.get());
-
-  return mSwapChain.get();
-}
-
-void Registrar::createSwapChainImageViews() {
-  for( auto i = 0u; i < mSwapChainImages.size(); ++i ) {
-    vk::ImageViewCreateInfo info(
-    {}, // empty flags
-          mSwapChainImages[i],
-          vk::ImageViewType::e2D,
-          mSwapChainFormat,
-    {}, // IDENTITY component mapping
-          vk::ImageSubresourceRange(
-    {vk::ImageAspectFlagBits::eColor},0, 1, 0, 1)
-          );
-    mSwapChainImageViews.emplace_back( mDevice->createImageViewUnique(info) );
-  }
-}
 
 void Registrar::createRenderPass() {
   // The render pass contains stuff like what the framebuffer attachments are and things
   vk::AttachmentDescription colourAttachment = {};
-  colourAttachment.setFormat(mSwapChainFormat)
+  colourAttachment.setFormat(mWindowIntegration->format())
       .setSamples(vk::SampleCountFlagBits::e1)
       .setLoadOp(vk::AttachmentLoadOp::eClear) // What to do before rendering
       .setStoreOp(vk::AttachmentStoreOp::eStore) // What to do after rendering
@@ -497,8 +411,8 @@ void Registrar::createGraphicsPipeline() {
         );
 
   // Viewport
-  vk::Viewport viewport(0.f,0.f, mSwapChainExtent.width, mSwapChainExtent.height, 0.f, 1.f);
-  vk::Rect2D scissor({0,0},mSwapChainExtent);
+  vk::Viewport viewport(0.f,0.f, mWindowIntegration->extent().width, mWindowIntegration->extent().height, 0.f, 1.f);
+  vk::Rect2D scissor({0,0},mWindowIntegration->extent());
   vk::PipelineViewportStateCreateInfo viewportInfo({}, 1, &viewport, 1, &scissor);
 
   // Rasteriser
@@ -593,24 +507,6 @@ void Registrar::createGraphicsPipeline() {
 
   // Shader modules deleted here, only needed for pipeline init
 }
-
-void Registrar::createFramebuffers() {
-  for( auto i = 0u; i < mSwapChainImages.size(); ++i ) {
-    auto attachment = mSwapChainImageViews[i].get();
-
-    vk::FramebufferCreateInfo info = {};
-    info.setRenderPass(mRenderPass.get()) // Compatible with this render pass (don't use it with any other)
-        .setAttachmentCount(1) // 1 attachment - The image from the swap chain
-        .setPAttachments(&attachment) // Mapped to the first attachment of the render pass
-        .setWidth(mSwapChainExtent.width)
-        .setHeight(mSwapChainExtent.height)
-        .setLayers(1)
-        ;
-
-    mSwapChainFrameBuffers.emplace_back( mDevice->createFramebufferUnique(info));
-  }
-}
-
 
 
 std::vector<char> Registrar::readFile(const std::string& fileName) {

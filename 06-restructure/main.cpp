@@ -47,7 +47,6 @@ private:
   std::vector<vk::UniqueSemaphore> mRenderFinishedSemaphores;
   std::vector<vk::UniqueFence> mFrameInFlightFences;
 
-
   void initWindow() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -77,45 +76,19 @@ private:
     // Create a logical device to interact with
     // To do this we also need to specify how many queues from which families we want to create
     // In this case just 1 queue from the first family which supports graphics
-#ifdef VK_USE_PLATFORM_XLIB_KHR
-    auto X11dpy = XOpenDisplay(nullptr);
-    auto X11vis = DefaultVisual(X11dpy, 0);
-    auto X11screen = DefaultScreen(X11dpy);
-    auto X11depth = DefaultDepth(X11dpy, 0);
-    XSetWindowAttributes X11WindowAttribs;
-    X11WindowAttribs.background_pixel = XWhitePixel(X11dpy, 0);
 
-    auto X11Window = XCreateWindow(
-          X11dpy,
-          XRootWindow(X11dpy, 0),
-          0, 0, 800, 600, 0, X11depth,
-          InputOutput, X11vis, CWBackPixel,
-          &X11WindowAttribs );
-    XStoreName(X11dpy, X11Window, "Vulkan Experiment");
-    XSelectInput(X11dpy, X11Window, ExposureMask | StructureNotifyMask | KeyPressMask);
-    XMapWindow(X11dpy, X11Window);
-
-    auto logicalDevice = reg.createLogicalDeviceWithPresentQueueXlib(vk::QueueFlagBits::eGraphics, X11dpy, XVisualIDFromVisual(X11vis));
-    auto surface = reg.createSurfaceXlib(X11dpy, X11Window);
-    auto swapChain = reg.createSwapChainXlib();
-#elif defined(USE_GLFW)
     mDevice = reg.createLogicalDevice(vk::QueueFlagBits::eGraphics);
-    reg.createSurfaceGLFW(mWindow);
-#else
-    mDevice = reg.createLogicalDevice(vk::QueueFlagBits::eGraphics);
-#endif
+    reg.mWindowIntegration.reset(new WindowIntegration(reg.instance(), reg.physicalDevice(), reg.queueFamilyIndex(), reg.device(), mWindow));
 
     // Get the queue from the device
     // queues are the thing that actually do the work
     // could be a subprocessor on the device, or some other subsection of capability
     mGraphicsQueue = reg.queue();
     mPresentQueue = reg.queue(); // Intentionally the same at first, shouldn't be doing it like this really as there's a chance we don't have 1 queue that supports both graphics and present
-    reg.createSwapChain();
-    reg.swapChainImages();
-    reg.createSwapChainImageViews();
+
     reg.createRenderPass();
     reg.createGraphicsPipeline();
-    reg.createFramebuffers();
+    reg.mFrameBuffer.reset(new FrameBuffer(reg.device(), *reg.mWindowIntegration.get(), reg.renderPass()));
 
     // Setup our sync primitives
     // imageAvailable - gpu: Used to stall the pipeline until the presentation has finished reading from the image
@@ -123,7 +96,7 @@ private:
     // frameInFlightFence - cpu: Used to ensure we don't schedule a second frame for each image until the last is complete
 
     // Create the semaphores we're gonna use
-    mMaxFramesInFlight = reg.swapChainImages().size();
+    mMaxFramesInFlight = reg.mWindowIntegration->swapChainImages().size();
     for( auto i = 0u; i < mMaxFramesInFlight; ++i ) {
       mImageAvailableSemaphores.emplace_back( mDevice.createSemaphoreUnique({}));
       mRenderFinishedSemaphores.emplace_back( mDevice.createSemaphoreUnique({}));
@@ -140,7 +113,7 @@ private:
     // Now make a command buffer for each framebuffer
      vk::CommandBufferAllocateInfo commandBufferAllocateInfo = {};
      commandBufferAllocateInfo.setCommandPool(mCommandPool)
-         .setCommandBufferCount(static_cast<uint32_t>(reg.swapChainImages().size()))
+         .setCommandBufferCount(static_cast<uint32_t>(reg.mWindowIntegration->swapChainImages().size()))
          .setLevel(vk::CommandBufferLevel::ePrimary)
          ;
 
@@ -157,9 +130,9 @@ private:
       // Start the render pass
       vk::RenderPassBeginInfo renderPassInfo = {};
       renderPassInfo.setRenderPass(reg.renderPass())
-                    .setFramebuffer(reg.frameBuffers()[i].get());
+                    .setFramebuffer(reg.mFrameBuffer->frameBuffers()[i].get());
       renderPassInfo.renderArea.offset = vk::Offset2D(0,0);
-      renderPassInfo.renderArea.extent = reg.swapChainExtent();
+      renderPassInfo.renderArea.extent = reg.mWindowIntegration->extent();
       // Info for attachment load op clear
       std::array<float,4> col = {0.f,.0f,0.f,1.f};
       vk::ClearValue clearColour(col);
@@ -201,9 +174,13 @@ private:
       frameIndex++;
       if( frameIndex == mMaxFramesInFlight ) frameIndex = 0;
 
+      // Reset the fence - fences must be reset before being submitted
+      auto frameFence = mFrameInFlightFences[frameIndex].get();
+      mDevice.resetFences(1, &frameFence);
+
       // Acquire and image from the swap chain
       auto imageIndex = mDevice.acquireNextImageKHR(
-            reg.swapChain(), // Get an image from this
+            reg.mWindowIntegration->swapChain(), // Get an image from this
             std::numeric_limits<uint64_t>::max(), // Don't timeout
             mImageAvailableSemaphores[frameIndex].get(), // semaphore to signal once presentation is finished with the image
             vk::Fence()).value; // Dummy fence, we don't care here
@@ -235,10 +212,10 @@ private:
 
       vk::ArrayProxy<vk::SubmitInfo> submits(submitInfo);
       // submit, signal the frame fence at the end
-      mGraphicsQueue.submit(submits.size(), submits.data(), mFrameInFlightFences[frameIndex].get());
+      mGraphicsQueue.submit(submits.size(), submits.data(), frameFence);
 
       // Present the results of a frame to the swap chain
-      vk::SwapchainKHR swapChains[] = {reg.swapChain()};
+      vk::SwapchainKHR swapChains[] = {reg.mWindowIntegration->swapChain()};
       vk::PresentInfoKHR presentInfo = {};
       presentInfo.setWaitSemaphoreCount(1)
           .setPWaitSemaphores(signalSemaphores) // Wait before presentation can start

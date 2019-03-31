@@ -12,6 +12,9 @@
 # include <X11/Xlib.h>
 #endif
 
+#include "windowintegration.h"
+#include "framebuffer.h"
+
 /**
  * Probably the wrong name for this
  * Basically a big singleton for storing
@@ -45,14 +48,6 @@ public:
 #error "XCB support not implemented"
   uint32_t findPresentQueueXcb(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags);
 #endif
-#ifdef USE_GLFW
-  vk::SurfaceKHR& createSurfaceGLFW(GLFWwindow* window);
-#endif
-  vk::SwapchainKHR& createSwapChain();
-  void createSwapChainImageViews();
-  void createRenderPass();
-  void createGraphicsPipeline();
-  void createFramebuffers();
 
   vk::CommandPool& createCommandPool( vk::CommandPoolCreateFlags flags );
   vk::UniqueBuffer createBuffer( vk::DeviceSize size, vk::BufferUsageFlags usageFlags );
@@ -70,6 +65,8 @@ public:
   void flushMemoryRanges( vk::ArrayProxy<const vk::MappedMemoryRange> mem );
 
 
+  void createRenderPass();
+  void createGraphicsPipeline();
 
 
   vk::Instance& instance();
@@ -78,13 +75,18 @@ public:
   vk::PhysicalDevice& physicalDevice();
   uint32_t queueFamilyIndex();
   vk::Queue& queue();
-  vk::SwapchainKHR& swapChain();
-  std::vector<vk::Image>& swapChainImages();
   std::vector<vk::UniqueCommandPool>& commandPools();
   vk::RenderPass& renderPass();
-  std::vector<vk::UniqueFramebuffer>& frameBuffers();
-  vk::Extent2D& swapChainExtent();
   vk::UniquePipeline& graphicsPipeline();
+
+
+
+
+  // Our classyboys to obfuscate the verbosity somewhat
+  // Public in reg for now as reg is doing the cleanup right now..
+  std::unique_ptr<WindowIntegration> mWindowIntegration;
+  std::unique_ptr<FrameBuffer> mFrameBuffer;
+
 private:
   Registrar();
   Registrar(const Registrar&) = delete;
@@ -104,14 +106,8 @@ private:
 
   // TODO: Initially just 1 logical device and 1 queue
   vk::UniqueDevice mDevice;
-  vk::UniqueSurfaceKHR mSurface;
-  vk::UniqueSwapchainKHR mSwapChain;
-  vk::Format mSwapChainFormat;
-  vk::Extent2D mSwapChainExtent;
-  std::vector<vk::Image> mSwapChainImages;
-  std::vector<vk::UniqueImageView> mSwapChainImageViews;
-  /// One framebuffer definition for each swap chain image, as we'll cycle through them each frame
-  std::vector<vk::UniqueFramebuffer> mSwapChainFrameBuffers;
+
+
   vk::UniquePipelineLayout mPipelineLayout;
   vk::UniqueRenderPass mRenderPass;
   vk::UniquePipeline mGraphicsPipeline;
@@ -130,11 +126,6 @@ inline std::vector<vk::PhysicalDevice>& Registrar::physicalDevices() { return mP
 inline vk::PhysicalDevice& Registrar::physicalDevice() { return mPhysicalDevices.front(); }
 inline uint32_t Registrar::queueFamilyIndex() { return mQueueFamIndex; }
 inline vk::Queue& Registrar::queue() { return mQueues.front(); }
-inline vk::SwapchainKHR& Registrar::swapChain() { return mSwapChain.get(); }
-inline std::vector<vk::Image>& Registrar::swapChainImages() { return mSwapChainImages; }
-inline std::vector<vk::UniqueCommandPool>& Registrar::commandPools() { return mCommandPools; }
-inline vk::RenderPass& Registrar::renderPass() { return mRenderPass.get(); }
-inline std::vector<vk::UniqueFramebuffer>& Registrar::frameBuffers() { return mSwapChainFrameBuffers; }
-inline vk::Extent2D& Registrar::swapChainExtent() { return mSwapChainExtent; }
 inline vk::UniquePipeline& Registrar::graphicsPipeline() { return mGraphicsPipeline; }
+inline vk::RenderPass& Registrar::renderPass() { return mRenderPass.get(); }
 #endif
