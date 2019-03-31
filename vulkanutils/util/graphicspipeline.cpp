@@ -14,8 +14,9 @@ GraphicsPipeline::GraphicsPipeline(WindowIntegration& windowIntegration, DeviceI
 
 void GraphicsPipeline::createRenderPass() {
   // The render pass contains stuff like what the framebuffer attachments are and things
-  vk::AttachmentDescription colourAttachment = {};
-  colourAttachment.setFormat(mWindowIntegration.format())
+  auto colourAttachment = vk::AttachmentDescription()
+      .setFlags({})
+      .setFormat(mWindowIntegration.format())
       .setSamples(vk::SampleCountFlagBits::e1)
       .setLoadOp(vk::AttachmentLoadOp::eClear) // What to do before rendering
       .setStoreOp(vk::AttachmentStoreOp::eStore) // What to do after rendering
@@ -29,26 +30,20 @@ void GraphicsPipeline::createRenderPass() {
   // Multiple sub passes are used for multi-pass rendering
   // putting them in one overall render pass means vulkan can reorder
   // them as needed
-  vk::AttachmentReference colourAttachmentRef = {};
-  colourAttachmentRef.setAttachment(0) // Index in attachment description array (We only have one so far)
+  auto colourAttachmentRef = vk::AttachmentReference()
+      .setAttachment(0) // Index in attachment description array (We only have one so far)
       .setLayout(vk::ImageLayout::eColorAttachmentOptimal) // Layout for the attachment during this subpass. This attachment is our colour buffer so marked as such here
       ;
 
-  vk::SubpassDescription subpass = {};
-  subpass.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics) // Marked as a graphics subpass, looks like we can mix multiple subpass types in one render pass?
+  auto subpass = vk::SubpassDescription()
+      .setFlags({})
+      .setPipelineBindPoint(vk::PipelineBindPoint::eGraphics) // Marked as a graphics subpass, looks like we can mix multiple subpass types in one render pass?
       .setColorAttachmentCount(1)
       .setPColorAttachments(&colourAttachmentRef)
       ;
   // Index of colour attachment here matches layout = 0 in fragment shader
   // So the frag shader can reference multiple attachments as its output!
 
-  // Now let's actually make the render pass
-  vk::RenderPassCreateInfo renderPassInfo = {};
-  renderPassInfo.setAttachmentCount(1)
-      .setPAttachments(&colourAttachment)
-      .setSubpassCount(1)
-      .setPSubpasses(&subpass)
-      ;
 
   /*
    * Setup subpass dependencies
@@ -62,9 +57,8 @@ void GraphicsPipeline::createRenderPass() {
    * TODO: Yeah I don't understand this and the tutorials gloss over it, probably more info in the
    * synchronisation chapter of the book
    */
-
-  vk::SubpassDependency dep = {};
-  dep.setSrcSubpass(VK_SUBPASS_EXTERNAL) // implicit subpass before this pass
+  auto dep = vk::SubpassDependency()
+      .setSrcSubpass(VK_SUBPASS_EXTERNAL) // implicit subpass before this pass
       .setDstSubpass(0) // The index of our subpass
       .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput) // Wait on this operation
       .setSrcAccessMask(vk::AccessFlags()) // Which needs to happen in this stage...here we're waiting for the swap chain to finish reading from the image
@@ -73,7 +67,14 @@ void GraphicsPipeline::createRenderPass() {
                                                             // These prevent the transition from happening until it's necessary/allowed, when we want to start writing colours to it..
       ;
 
-  renderPassInfo.setDependencyCount(1)
+  // Now let's actually make the render pass
+  auto renderPassInfo = vk::RenderPassCreateInfo()
+      .setFlags({})
+      .setAttachmentCount(1)
+      .setPAttachments(&colourAttachment)
+      .setSubpassCount(1)
+      .setPSubpasses(&subpass)
+      .setDependencyCount(1)
       .setPDependencies(&dep)
       ;
 
@@ -86,22 +87,22 @@ void GraphicsPipeline::createGraphicsPipeline() {
    * And in this case the shaders were even compiled from glsl -> SPIR-V
    */
   auto vertShaderMod = createShaderModule("vert.spv");
-  vk::PipelineShaderStageCreateInfo vertInfo(
-        vk::PipelineShaderStageCreateFlags(),
-        vk::ShaderStageFlagBits::eVertex,
-        vertShaderMod.get(),
-        "main",
-        nullptr // Specialisation info - allows specification of shader constants at link time
-        );
+  auto vertInfo = vk::PipelineShaderStageCreateInfo()
+      .setFlags({})
+      .setStage(vk::ShaderStageFlagBits::eVertex)
+      .setModule(vertShaderMod.get())
+      .setPName("main")
+      .setPSpecializationInfo(nullptr)
+      ;
 
   auto fragShaderMod = createShaderModule("frag.spv");
-  vk::PipelineShaderStageCreateInfo fragInfo(
-        vk::PipelineShaderStageCreateFlags(),
-        vk::ShaderStageFlagBits::eFragment,
-        fragShaderMod.get(),
-        "main",
-        nullptr // Specialisation info - allows specification of shader constants at link time
-        );
+  auto fragInfo = vk::PipelineShaderStageCreateInfo()
+      .setFlags({})
+      .setStage(vk::ShaderStageFlagBits::eFragment)
+      .setModule(fragShaderMod.get())
+      .setPName("main")
+      .setPSpecializationInfo(nullptr)
+      ;
 
   vk::PipelineShaderStageCreateInfo shaderStages[] = {vertInfo, fragInfo};
 
@@ -110,47 +111,52 @@ void GraphicsPipeline::createGraphicsPipeline() {
    */
   // Vertex input
   // For now nothing here as vertices are hardcoded in the shader
-  vk::PipelineVertexInputStateCreateInfo vertInputInfo(
-        {},
-        0, //Binding description count
-        nullptr, // Binding descriptions
-        0, // Attribute description count
-        nullptr // Attribute descriptions
-        );
+  auto vertInputInfo = vk::PipelineVertexInputStateCreateInfo()
+      .setFlags({})
+      .setVertexBindingDescriptionCount(0)
+      .setPVertexBindingDescriptions(nullptr)
+      .setVertexAttributeDescriptionCount(0)
+      .setPVertexAttributeDescriptions(nullptr)
+      ;
 
   // Input assembly
   // Typical triangles setup
-  vk::PipelineInputAssemblyStateCreateInfo inputAssInfo(
-        {},
-        vk::PrimitiveTopology::eTriangleList,
-        false // Primitive restart
-        );
+  auto inputAssInfo = vk::PipelineInputAssemblyStateCreateInfo()
+      .setFlags({})
+      .setTopology(vk::PrimitiveTopology::eTriangleList)
+      .setPrimitiveRestartEnable(false)
+      ;
 
   // Viewport
   vk::Viewport viewport(0.f,0.f, mWindowIntegration.extent().width, mWindowIntegration.extent().height, 0.f, 1.f);
   vk::Rect2D scissor({0,0},mWindowIntegration.extent());
-  vk::PipelineViewportStateCreateInfo viewportInfo({}, 1, &viewport, 1, &scissor);
+  auto viewportInfo = vk::PipelineViewportStateCreateInfo()
+      .setFlags({})
+      .setViewportCount(1)
+      .setPViewports(&viewport)
+      .setScissorCount(1)
+      .setPScissors(&scissor)
+      ;
 
   // Rasteriser
-  vk::PipelineRasterizationStateCreateInfo rasterisationInfo(
-          {},
-          false, // Depth clamp enable
-          false, // Discard enable
-          vk::PolygonMode::eFill, // Cool, we can just toggle this to make a wireframe <3
-          vk::CullModeFlagBits::eBack, // Backface culling of course
-          vk::FrontFace::eCounterClockwise, // Tutorial is of course wrong here, so we'll need to fix the vertices
-          false, // Depth bias enable
-          0.f, // Depth bias factor
-          false, // Depth bias clamp
-          0.f, // Depth bias clamp
-          1.f // Line width
-          );
+  auto rasterisationInfo = vk::PipelineRasterizationStateCreateInfo()
+      .setFlags({})
+      .setDepthClampEnable(false)
+      .setRasterizerDiscardEnable(false)
+      .setPolygonMode(vk::PolygonMode::eFill)
+      .setCullMode(vk::CullModeFlagBits::eBack)
+      .setFrontFace(vk::FrontFace::eCounterClockwise)
+      .setDepthBiasEnable(false)
+      .setDepthBiasConstantFactor(0.f)
+      .setDepthClampEnable(false)
+      .setDepthBiasClamp(0.f)
+      .setLineWidth(1.f)
+      ;
 
   // Multisampling
-  vk::PipelineMultisampleStateCreateInfo multisampleInfo = {};
-  multisampleInfo.setSampleShadingEnable(false)
-                .setRasterizationSamples(vk::SampleCountFlagBits::e1)
-                ;
+  auto multisampleInfo = vk::PipelineMultisampleStateCreateInfo()
+      .setSampleShadingEnable(false)
+      .setRasterizationSamples(vk::SampleCountFlagBits::e1);
 
   // Depth/Stencil test
   // Not yet, we're gonna pass null for this one ;)
@@ -158,10 +164,9 @@ void GraphicsPipeline::createGraphicsPipeline() {
   // Colour blending
   // attachment state is per-framebuffer
   // creat info is global to the pipeline
-  vk::PipelineColorBlendAttachmentState colourBlendAttach = {};
-  colourBlendAttach.setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
+  auto colourBlendAttach = vk::PipelineColorBlendAttachmentState()
+      .setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
       .setBlendEnable(false)
-      /*
       .setBlendEnable(true)
       .setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha)
       .setDstColorBlendFactor(vk::BlendFactor::eOneMinusDstAlpha)
@@ -169,11 +174,11 @@ void GraphicsPipeline::createGraphicsPipeline() {
       .setSrcAlphaBlendFactor(vk::BlendFactor::eOne)
       .setDstAlphaBlendFactor(vk::BlendFactor::eZero)
       .setAlphaBlendOp(vk::BlendOp::eAdd)
-      */
       ;
 
-  vk::PipelineColorBlendStateCreateInfo colourBlendInfo = {};
-  colourBlendInfo.setLogicOpEnable(false)
+  auto colourBlendInfo = vk::PipelineColorBlendStateCreateInfo()
+      .setFlags({})
+      .setLogicOpEnable(false)
       .setLogicOp(vk::LogicOp::eCopy)
       .setAttachmentCount(1)
       .setPAttachments(&colourBlendAttach)
@@ -189,8 +194,9 @@ void GraphicsPipeline::createGraphicsPipeline() {
   // Pipeline layout is where uniforms and such go
   // and they have to be known when the pipeline is built
   // So no randomly chucking uniforms around like we do in gl right?
-  vk::PipelineLayoutCreateInfo layoutInfo = {};
-  layoutInfo.setSetLayoutCount(0)
+  auto layoutInfo = vk::PipelineLayoutCreateInfo()
+      .setFlags({})
+      .setSetLayoutCount(0)
       .setPSetLayouts(nullptr)
       .setPushConstantRangeCount(0)
       .setPPushConstantRanges(nullptr)
@@ -200,8 +206,9 @@ void GraphicsPipeline::createGraphicsPipeline() {
 
 
   // Finally let's make the pipeline itself
-  vk::GraphicsPipelineCreateInfo pipelineInfo = {};
-  pipelineInfo.setStageCount(2)
+  auto pipelineInfo = vk::GraphicsPipelineCreateInfo()
+      .setFlags({})
+      .setStageCount(2)
       .setPStages(shaderStages)
       .setPVertexInputState(&vertInputInfo)
       .setPInputAssemblyState(&inputAssInfo)
@@ -229,10 +236,10 @@ vk::UniqueShaderModule GraphicsPipeline::createShaderModule(const std::string& f
   // Note that data passed to info is as uint32_t*, so must be 4-byte aligned
   // According to tutorial std::vector already satisfies worst case alignment needs
   // TODO: But we should probably double check the alignment here just incase
-  vk::ShaderModuleCreateInfo info(
-        vk::ShaderModuleCreateFlags(),
-        shaderCode.size(),
-        reinterpret_cast<const uint32_t*>(shaderCode.data())
-        );
+  auto info = vk::ShaderModuleCreateInfo()
+      .setFlags({})
+      .setCodeSize(shaderCode.size())
+      .setPCode(reinterpret_cast<const uint32_t*>(shaderCode.data()))
+      ;
   return mDeviceInstance.device().createShaderModuleUnique(info);
 }

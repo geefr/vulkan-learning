@@ -103,9 +103,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Util::debugCallback(
 #endif
 
 void Util::ensureExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName) {
-  if( std::find_if(extensions.begin(), extensions.end(), [&](auto& e) {
-                   return e.extensionName == extensionName;
-}) == extensions.end()) throw std::runtime_error("Extension not supported: " + extensionName);
+  if( std::find_if(extensions.begin(), extensions.end(), [&](auto& e) {return e.extensionName == extensionName;}) == extensions.end())
+    throw std::runtime_error("Extension not supported: " + extensionName);
 }
 
 uint32_t Util::findQueue(DeviceInstance& device, vk::QueueFlags requiredFlags) {
@@ -115,7 +114,7 @@ uint32_t Util::findQueue(DeviceInstance& device, vk::QueueFlags requiredFlags) {
     return false;
   });
   if( it == qFamProps.end() ) return std::numeric_limits<uint32_t>::max();
-  return it - qFamProps.begin();
+  return static_cast<uint32_t>(it - qFamProps.begin());
 }
 
 
@@ -126,20 +125,20 @@ void Util::initDidl( vk::Instance& instance ) {
 
 
 void Util::initDebugMessenger( vk::Instance& instance ) {
-  vk::DebugUtilsMessengerCreateInfoEXT cbInfo(
-  {},
-  {vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
-   vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
-   vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
-   vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning},
-  {vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-   vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-   vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation},
-        debugCallback,
-        nullptr
-        );
+  auto info = vk::DebugUtilsMessengerCreateInfoEXT()
+      .setFlags({})
+      .setMessageSeverity({vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+                           vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
+                           vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+                           vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning})
+      .setMessageType({vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+                       vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+                       vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation})
+      .setPfnUserCallback(debugCallback)
+      .setPUserData(nullptr)
+      ;
 
-  mDebugUtilsMessenger = instance.createDebugUtilsMessengerEXTUnique(cbInfo, nullptr, mDidl);
+  mDebugUtilsMessenger = instance.createDebugUtilsMessengerEXTUnique(info, nullptr, mDidl);
   mDebugCallbackValid = true;
 }
 #endif

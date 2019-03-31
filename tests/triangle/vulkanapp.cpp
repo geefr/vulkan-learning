@@ -1,10 +1,11 @@
 #include "vulkanapp.h"
-
+#include <mutex>
 
 void VulkanApp::initWindow() {
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
   mWindow = glfwCreateWindow(mWindowWidth, mWindowHeight, "Vulkan Experiment", nullptr, nullptr);
 }
 
@@ -51,8 +52,8 @@ void VulkanApp::initVK() {
                                                      });
 
   // Now make a command buffer for each framebuffer
-  vk::CommandBufferAllocateInfo commandBufferAllocateInfo = {};
-  commandBufferAllocateInfo.setCommandPool(mCommandPool.get())
+  auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo()
+      .setCommandPool(mCommandPool.get())
       .setCommandBufferCount(static_cast<uint32_t>(mWindowIntegration->swapChainImages().size()))
       .setLevel(vk::CommandBufferLevel::ePrimary)
       ;
@@ -61,24 +62,25 @@ void VulkanApp::initVK() {
 
   for( auto i = 0u; i < mCommandBuffers.size(); ++i ) {
     auto commandBuffer = mCommandBuffers[i].get();
-    vk::CommandBufferBeginInfo beginInfo = {};
-    beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution - TODO: Wat?
+    auto beginInfo = vk::CommandBufferBeginInfo()
+        .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution - TODO: Wat?
         .setPInheritanceInfo(nullptr)
         ;
     commandBuffer.begin(beginInfo);
 
     // Start the render pass
-    vk::RenderPassBeginInfo renderPassInfo = {};
-    renderPassInfo.setRenderPass(mGraphicsPipeline->renderPass())
-        .setFramebuffer(mFrameBuffer->frameBuffers()[i].get());
-    renderPassInfo.renderArea.offset = vk::Offset2D(0,0);
-    renderPassInfo.renderArea.extent = mWindowIntegration->extent();
     // Info for attachment load op clear
     std::array<float,4> col = {0.f,.0f,0.f,1.f};
     vk::ClearValue clearColour(col);
-    renderPassInfo.setClearValueCount(1)
-        .setPClearValues(&clearColour)
-        ;
+
+    auto renderPassInfo = vk::RenderPassBeginInfo()
+        .setRenderPass(mGraphicsPipeline->renderPass())
+        .setFramebuffer(mFrameBuffer->frameBuffers()[i].get())
+        .setClearValueCount(1)
+        .setPClearValues(&clearColour);
+    renderPassInfo.renderArea.offset = vk::Offset2D(0,0);
+    renderPassInfo.renderArea.extent = mWindowIntegration->extent();
+
     // render commands will be embedded in primary buffer and no secondary command buffers
     // will be executed
     commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
@@ -102,7 +104,11 @@ void VulkanApp::initVK() {
 void VulkanApp::loop() {
   auto frameIndex = 0u;
 
+
   while(!glfwWindowShouldClose(mWindow)) {
+    std::once_flag windowShown;
+    std::call_once(windowShown, [&win=mWindow](){glfwShowWindow(win);});
+
     glfwPollEvents();
 
     // Wait for the last frame to finish rendering

@@ -11,9 +11,9 @@ void FrameBuffer::createFrameBuffers( vk::Device& device, const WindowIntegratio
   if( !mFrameBuffers.empty() ) throw std::runtime_error("Framenbuffer::createFramebuffers: Already initialised");
   for( auto i = 0u; i < windowIntegration.swapChainImages().size(); ++i ) {
     auto attachment = windowIntegration.swapChainImageViews()[i].get();
-
-    vk::FramebufferCreateInfo info = {};
-    info.setRenderPass(renderPass) // Compatible with this render pass (don't use it with any other)
+    auto info = vk::FramebufferCreateInfo()
+        .setFlags({})
+        .setRenderPass(renderPass) // Compatible with this render pass (don't use it with any other)
         .setAttachmentCount(1) // 1 attachment - The image from the swap chain
         .setPAttachments(&attachment) // Mapped to the first attachment of the render pass
         .setWidth(windowIntegration.extent().width)

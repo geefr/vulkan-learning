@@ -41,21 +41,19 @@ void DeviceInstance::createVulkanInstance(const std::vector<const char*>& requir
 #ifdef VK_USE_PLATFORM_LIB_XCB_KHR
   ensureInstanceExtension(supportedExtensions, "TODO");
 #endif
-
-  vk::ApplicationInfo applicationInfo(
-        appName.c_str(), // Application Name
-        appVer, // Application version
-        "geefr", // engine name
-        1, // engine version
-        apiVer // absolute minimum vulkan api
-        );
+  auto applicationInfo = vk::ApplicationInfo()
+      .setPApplicationName(appName.c_str())
+      .setApplicationVersion(appVer)
+      .setPEngineName("Vulkan Utils by Gareth Francis (geefr) (gfrancis.dev@gmail.com)")
+      .setEngineVersion(1)
+      .setApiVersion(apiVer);
 
 #ifdef DEBUG
   uint32_t enabledLayerCount = 1;
   const char* const enabledLayerNames[] = {
     "VK_LAYER_LUNARG_standard_validation",
   };
-  enabledInstanceExtensions.push_back("VK_EXT_debug_utils");
+  enabledInstanceExtensions.emplace_back("VK_EXT_debug_utils");
 
 #else
   uint32_t enabledLayerCount = 0;
@@ -63,14 +61,13 @@ void DeviceInstance::createVulkanInstance(const std::vector<const char*>& requir
 #endif
 
   for( auto& e : enabledInstanceExtensions ) Util::ensureExtension(supportedExtensions, e);
-  vk::InstanceCreateInfo instanceCreateInfo(
-        vk::InstanceCreateFlags(),
-        &applicationInfo, // Application Info
-        enabledLayerCount, // enabledLayerCount
-        enabledLayerNames, // ppEnabledLayerNames
-        static_cast<uint32_t>(enabledInstanceExtensions.size()), // enabledExtensionCount. In vulkan these need to be requested on init unlike in gl
-        enabledInstanceExtensions.data() // ppEnabledExtensionNames
-        );
+  auto instanceCreateInfo = vk::InstanceCreateInfo()
+      .setFlags({})
+      .setPApplicationInfo(&applicationInfo)
+      .setEnabledLayerCount(enabledLayerCount)
+      .setPpEnabledLayerNames(enabledLayerNames)
+      .setEnabledExtensionCount(static_cast<uint32_t>(enabledInstanceExtensions.size()))
+      .setPpEnabledExtensionNames(enabledInstanceExtensions.data());
 
   mInstance = vk::createInstanceUnique(instanceCreateInfo);
 
@@ -84,7 +81,6 @@ void DeviceInstance::createVulkanInstance(const std::vector<const char*>& requir
   if( mPhysicalDevices.empty() ) throw std::runtime_error("Failed to enumerate physical devices");
 
   // Device order in the list isn't guaranteed, likely the integrated gpu is first
-  // So why don't we fix that? As we're using the C++ api we can just sort the vector
   std::sort(mPhysicalDevices.begin(), mPhysicalDevices.end(), [&](auto& a, auto& b) {
     vk::PhysicalDeviceProperties propsA;
     a.getProperties(&propsA);
@@ -124,35 +120,34 @@ void DeviceInstance::createLogicalDevice() {
 #endif
 
   float queuePriorities = 1.f;
-  vk::DeviceQueueCreateInfo queueInfo(
-        vk::DeviceQueueCreateFlags(),
-        mQueueFamIndex, // Queue family index
-        1, // Number of queues to create
-        &queuePriorities // Priorities of each queue
-        );
+  auto queueInfo = vk::DeviceQueueCreateInfo()
+      .setFlags({})
+      .setQueueFamilyIndex(mQueueFamIndex)
+      .setQueueCount(1)
+      .setPQueuePriorities(&queuePriorities)
+      ;
 
   // The features of the physical device
-  vk::PhysicalDeviceFeatures deviceSupportedFeatures;
-  mPhysicalDevices.front().getFeatures(&deviceSupportedFeatures);
+  auto deviceSupportedFeatures = mPhysicalDevices.front().getFeatures();
 
   // The features we require, we get very little without requesting these
   // As listed page 17
   // TODO: After creation the enabled features are set in this struct, will want to keep it for later
-  vk::PhysicalDeviceFeatures deviceRequiredFeatures;
-  deviceRequiredFeatures.multiDrawIndirect = deviceSupportedFeatures.multiDrawIndirect;
-  deviceRequiredFeatures.tessellationShader = true;
-  deviceRequiredFeatures.geometryShader = true;
+  auto deviceRequiredFeatures = vk::PhysicalDeviceFeatures()
+      .setMultiDrawIndirect(deviceSupportedFeatures.multiDrawIndirect)
+      .setTessellationShader(true)
+      .setGeometryShader(true);
 
-  vk::DeviceCreateInfo info(
-        vk::DeviceCreateFlags(),
-        1, // Queue create info count
-        &queueInfo, // Queue create info structs
-        enabledLayerCount, // Enabled layer count
-        enabledLayerNames, // Enabled layers
-        static_cast<uint32_t>(enabledDeviceExtensions.size()), // Enabled extension count
-        enabledDeviceExtensions.data(), // Enabled extensions
-        &deviceRequiredFeatures // Physical device features
-        );
+  auto info = vk::DeviceCreateInfo()
+      .setFlags({})
+      .setQueueCreateInfoCount(1)
+      .setPQueueCreateInfos(&queueInfo)
+      .setEnabledLayerCount(enabledLayerCount)
+      .setPpEnabledLayerNames(enabledLayerNames)
+      .setEnabledExtensionCount(static_cast<uint32_t>(enabledDeviceExtensions.size()))
+      .setPpEnabledExtensionNames(enabledDeviceExtensions.data())
+      .setPEnabledFeatures(&deviceRequiredFeatures)
+      ;
 
   mDevice = mPhysicalDevices.front().createDeviceUnique(info);
 
@@ -165,17 +160,18 @@ void DeviceInstance::waitAllDevicesIdle() {
 
 
 vk::UniqueCommandPool DeviceInstance::createCommandPool( vk::CommandPoolCreateFlags flags ) {
-  vk::CommandPoolCreateInfo info(flags, mQueueFamIndex); // TODO: Hack! should be passed by caller/some reference to the command queue class we don't have yet
+  auto info = vk::CommandPoolCreateInfo()
+      .setFlags(flags)
+      .setQueueFamilyIndex(mQueueFamIndex); // TODO: Hack! should be passed by caller/some reference to the command queue class we don't have yet
   return mDevice->createCommandPoolUnique(info);
 }
 
 vk::UniqueBuffer DeviceInstance::createBuffer( vk::DeviceSize size, vk::BufferUsageFlags usageFlags ) {
   // Exclusive buffer of size, for usageFlags
-  vk::BufferCreateInfo info(
-        vk::BufferCreateFlags(),
-        size,
-        usageFlags
-        );
+  auto info = vk::BufferCreateInfo()
+      .setFlags({})
+      .setSize(size)
+      .setUsage(usageFlags);
   return mDevice->createBufferUnique(info);
 }
 
@@ -202,10 +198,9 @@ vk::UniqueDeviceMemory DeviceInstance::allocateDeviceMemoryForBuffer( vk::Buffer
   vk::MemoryRequirements memReq = mDevice->getBufferMemoryRequirements(buffer);
 
   auto heapIdx = selectDeviceMemoryHeap(memReq, userReqs );
-
-  vk::MemoryAllocateInfo info(
-        memReq.size,
-        heapIdx);
+  auto info = vk::MemoryAllocateInfo()
+      .setAllocationSize(memReq.size)
+      .setMemoryTypeIndex(heapIdx);
 
   return mDevice->allocateMemoryUnique(info);
 }

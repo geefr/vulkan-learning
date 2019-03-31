@@ -67,22 +67,22 @@ void WindowIntegration::createSwapChain() {
   mSwapChainFormat = surfaceFormats.front().format;
   auto chosenColourSpace = surfaceFormats.front().colorSpace;
   mSwapChainExtent = caps.currentExtent;
-  vk::SwapchainCreateInfoKHR info(
-        vk::SwapchainCreateFlagsKHR(),
-        mSurface,
-        numImages, // Num images in the swapchain
-        mSwapChainFormat, // Pixel format
-        chosenColourSpace, // Colour space
-        mSwapChainExtent, // Size of window
-        1, // Image array layers
-        imageUsage, // Image usage flags
-        vk::SharingMode::eExclusive, 0, nullptr, // Exclusive use by one queue
-        caps.currentTransform, // flip/rotate before presentation
-        alphaMode, // How alpha is mapped
-        vk::PresentModeKHR::eFifo, // vsync (mailbox is vsync or faster, fifo is vsync)
-        true, // Clipped - For cases where part of window doesn't need to be rendered/is offscreen
-        vk::SwapchainKHR() // The old swapchain to delete
-        );
+  auto info = vk::SwapchainCreateInfoKHR()
+      .setFlags({})
+      .setSurface(mSurface)
+      .setMinImageCount(numImages)
+      .setImageFormat(mSwapChainFormat)
+      .setImageColorSpace(chosenColourSpace)
+      .setImageExtent(mSwapChainExtent)
+      .setImageArrayLayers(1)
+      .setImageUsage(imageUsage)
+      .setImageSharingMode(vk::SharingMode::eExclusive)
+      .setPreTransform(caps.currentTransform)
+      .setCompositeAlpha(alphaMode)
+      .setPresentMode(vk::PresentModeKHR::eFifo)
+      .setClipped(true)
+      .setOldSwapchain({})
+      ;
 
   mSwapChain = mDeviceInstance.device().createSwapchainKHRUnique(info);
   mSwapChainImages = mDeviceInstance.device().getSwapchainImagesKHR(mSwapChain.get());
@@ -90,15 +90,14 @@ void WindowIntegration::createSwapChain() {
 
 void WindowIntegration::createSwapChainImageViews() {
   for( auto i = 0u; i < mSwapChainImages.size(); ++i ) {
-    vk::ImageViewCreateInfo info(
-    {}, // empty flags
-          mSwapChainImages[i],
-          vk::ImageViewType::e2D,
-          mSwapChainFormat,
-    {}, // IDENTITY component mapping
-          vk::ImageSubresourceRange(
-    {vk::ImageAspectFlagBits::eColor},0, 1, 0, 1)
-          );
+    auto info = vk::ImageViewCreateInfo()
+        .setFlags({})
+        .setImage(mSwapChainImages[i])
+        .setViewType(vk::ImageViewType::e2D)
+        .setFormat(mSwapChainFormat)
+        .setComponents({})
+        .setSubresourceRange({{vk::ImageAspectFlagBits::eColor},0, 1, 0, 1})
+        ;
     mSwapChainImageViews.emplace_back( mDeviceInstance.device().createImageViewUnique(info) );
   }
 }
