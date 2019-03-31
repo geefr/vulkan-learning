@@ -15,8 +15,6 @@ if( CMAKE_BUILD_TYPE MATCHES "Debug" )
 endif()
 
 # Enable presentation surfaces
-find_package(glfw3 REQUIRED)
-add_compile_definitions( USE_GLFW )
 
 if( MSVC )
   # add_compile_definitions( VK_USE_PLATFORM_WIN32_KHR )
@@ -32,6 +30,15 @@ endif()
 
 # Package/System requirements
 find_package(Vulkan REQUIRED)
+
+# This is a little ugly but will work
+set( glslCompiler "${Vulkan_INCLUDE_DIR}/../bin/glslangValidator")
+if(NOT EXISTS "${glslCompiler}")
+  message( FATAL_ERORR "Unable to locate 'glslValidator'. Please install glsl-tools or provide a Vulkan SDK which includes this tool")
+endif()
+
+find_package(glfw3 REQUIRED)
+add_compile_definitions( USE_GLFW )
 
 set( VULKANUTILS_LIB_TYPE STATIC )
 

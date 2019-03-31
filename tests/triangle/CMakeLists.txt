@@ -9,8 +9,6 @@ add_executable(${targetName}
 	)
 target_link_libraries( ${targetName} Vulkan::Vulkan glfw vulkanutils )
 
-set( glslCompiler "${Vulkan_INCLUDE_DIR}/../Bin/glslangValidator")
-
 add_custom_target(triangle-shader-vert
 	COMMAND ${glslCompiler} -V ${CMAKE_CURRENT_SOURCE_DIR}/test.vert
 	SOURCES test.vert )
