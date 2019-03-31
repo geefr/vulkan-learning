@@ -5,11 +5,18 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include <map>
+
 GraphicsPipeline::GraphicsPipeline(WindowIntegration& windowIntegration, DeviceInstance& deviceInstance)
   : mWindowIntegration(windowIntegration)
   , mDeviceInstance(deviceInstance) {
+
+}
+
+vk::Pipeline& GraphicsPipeline::build() {
   createRenderPass();
   createGraphicsPipeline();
+  return mPipeline.get();
 }
 
 void GraphicsPipeline::createRenderPass() {
@@ -86,25 +93,9 @@ void GraphicsPipeline::createGraphicsPipeline() {
    * The programmable parts of the pipeline are similar to gl
    * And in this case the shaders were even compiled from glsl -> SPIR-V
    */
-  auto vertShaderMod = createShaderModule("vert.spv");
-  auto vertInfo = vk::PipelineShaderStageCreateInfo()
-      .setFlags({})
-      .setStage(vk::ShaderStageFlagBits::eVertex)
-      .setModule(vertShaderMod.get())
-      .setPName("main")
-      .setPSpecializationInfo(nullptr)
-      ;
 
-  auto fragShaderMod = createShaderModule("frag.spv");
-  auto fragInfo = vk::PipelineShaderStageCreateInfo()
-      .setFlags({})
-      .setStage(vk::ShaderStageFlagBits::eFragment)
-      .setModule(fragShaderMod.get())
-      .setPName("main")
-      .setPSpecializationInfo(nullptr)
-      ;
-
-  vk::PipelineShaderStageCreateInfo shaderStages[] = {vertInfo, fragInfo};
+  // Later we just need to hand a pile of shaders to the pipeline
+  auto shaderStages = createShaderStageInfo();
 
   /*
    * Then there's the fixed function sections of the pipeline
@@ -208,8 +199,8 @@ void GraphicsPipeline::createGraphicsPipeline() {
   // Finally let's make the pipeline itself
   auto pipelineInfo = vk::GraphicsPipelineCreateInfo()
       .setFlags({})
-      .setStageCount(2)
-      .setPStages(shaderStages)
+      .setStageCount(static_cast<uint32_t>(shaderStages.size()))
+      .setPStages(shaderStages.data())
       .setPVertexInputState(&vertInputInfo)
       .setPInputAssemblyState(&inputAssInfo)
       .setPViewportState(&viewportInfo)
@@ -226,7 +217,7 @@ void GraphicsPipeline::createGraphicsPipeline() {
       ;
 
 
-  mGraphicsPipeline = mDeviceInstance.device().createGraphicsPipelineUnique({}, pipelineInfo);
+  mPipeline = mDeviceInstance.device().createGraphicsPipelineUnique({}, pipelineInfo);
 
   // Shader modules deleted here, only needed for pipeline init
 }
@@ -242,4 +233,27 @@ vk::UniqueShaderModule GraphicsPipeline::createShaderModule(const std::string& f
       .setPCode(reinterpret_cast<const uint32_t*>(shaderCode.data()))
       ;
   return mDeviceInstance.device().createShaderModuleUnique(info);
+}
+
+std::vector<vk::PipelineShaderStageCreateInfo> GraphicsPipeline::createShaderStageInfo() {
+  std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
+  if( mShaders.mVertexShader ) {
+    auto vertInfo = vk::PipelineShaderStageCreateInfo()
+        .setFlags({})
+        .setStage(vk::ShaderStageFlagBits::eVertex)
+        .setModule(mShaders.mVertexShader)
+        .setPName("main")
+        .setPSpecializationInfo(nullptr);
+    shaderStages.emplace_back(vertInfo);
+  }
+  if( mShaders.mFragmentShader ) {
+    auto fragInfo = vk::PipelineShaderStageCreateInfo()
+        .setFlags({})
+        .setStage(vk::ShaderStageFlagBits::eFragment)
+        .setModule(mShaders.mFragmentShader)
+        .setPName("main")
+        .setPSpecializationInfo(nullptr);
+    shaderStages.emplace_back(fragInfo);
+  }
+  return shaderStages;
 }

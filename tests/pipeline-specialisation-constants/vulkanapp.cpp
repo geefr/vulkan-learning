@@ -29,7 +29,6 @@ void VulkanApp::initVK() {
   mWindowIntegration.reset(new WindowIntegration(*mDeviceInstance.get(), mWindow));
 
   mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get()));
-
   // Load our shaders and build the pipeline
   // In this case we can throw away the shader modules after building, nothing fancy
   {
