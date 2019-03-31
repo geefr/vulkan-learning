@@ -9,11 +9,13 @@ add_executable(${targetName}
 	)
 target_link_libraries( ${targetName} Vulkan::Vulkan glfw vulkanutils )
 
+set( glslCompiler "${Vulkan_INCLUDE_DIR}/../Bin/glslangValidator")
+
 add_custom_target(triangle-shader-vert
-	COMMAND /home/gareth/dev/thirdparty/vulkansdk/1.1.101.0/x86_64/bin/glslangValidator -V ${CMAKE_CURRENT_SOURCE_DIR}/test.vert
+	COMMAND ${glslCompiler} -V ${CMAKE_CURRENT_SOURCE_DIR}/test.vert
 	SOURCES test.vert )
 add_custom_target(triangle-shader-frag
-	COMMAND /home/gareth/dev/thirdparty/vulkansdk/1.1.101.0/x86_64/bin/glslangValidator -V ${CMAKE_CURRENT_SOURCE_DIR}/test.frag
+	COMMAND ${glslCompiler} -V ${CMAKE_CURRENT_SOURCE_DIR}/test.frag
 	SOURCES test.frag )
 
 add_dependencies( ${targetName} triangle-shader-vert triangle-shader-frag )
