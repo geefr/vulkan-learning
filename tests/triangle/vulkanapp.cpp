@@ -16,7 +16,7 @@ void VulkanApp::initVK() {
   const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
   std::vector<const char*> requiredExtensions;
   for(uint32_t i = 0; i < glfwExtensionCount; ++i ) requiredExtensions.push_back(glfwExtensions[i]);
-  mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "vulkan-experiments", 1));
+  mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "Vulkan Test Application", 1));
 
   // Find out what queues are available
   //auto queueFamilyProps = dev.getQueueFamilyProperties();

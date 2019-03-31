@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(vulkan-experiments)
+project(vulkan-stuff)
 
 if( NOT CMAKE_BUILD_TYPE )
   set( CMAKE_BUILD_TYPE Release CACHE PATH "Choose the type of build." FORCE )
