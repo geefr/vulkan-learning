@@ -1,5 +1,7 @@
-
-#include "util/registrar.h"
+#include "util/deviceinstance.h"
+#include "util/windowintegration.h"
+#include "util/graphicspipeline.h"
+#include "util/framebuffer.h"
 #include "util/simplebuffer.h"
 
 #ifdef USE_GLFW
@@ -29,16 +31,20 @@ public:
     loop();
     cleanup();
   }
+
 private:
+  // The window itself
   GLFWwindow* mWindow = nullptr;
   int mWindowWidth = 800;
   int mWindowHeight = 600;
 
-  vk::Instance mInstance;
-  vk::PhysicalDevice mPDevice;
-  vk::Device mDevice;
-  vk::Queue mGraphicsQueue;
-  vk::Queue mPresentQueue;
+  // Our classyboys to obfuscate the verbosity of vulkan somewhat
+  // Remember deletion order matters
+  std::unique_ptr<DeviceInstance> mDeviceInstance;
+  std::unique_ptr<WindowIntegration> mWindowIntegration;
+  std::unique_ptr<FrameBuffer> mFrameBuffer;
+  std::unique_ptr<GraphicsPipeline> mGraphicsPipeline;
+
   vk::UniqueCommandPool mCommandPool;
   std::vector<vk::UniqueCommandBuffer> mCommandBuffers;
 
@@ -55,40 +61,26 @@ private:
   }
 
   void initVK() {
-    auto& reg = Registrar::singleton();
-
     // Initialise the vulkan instance
-    {
-      // GLFW can give us what extensions it requires, nice
-      uint32_t glfwExtensionCount = 0;
-      const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-      std::vector<const char*> requiredExtensions;
-      for(uint32_t i = 0; i < glfwExtensionCount; ++i ) requiredExtensions.push_back(glfwExtensions[i]);
-      reg.mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "vulkan-experiments", 1));
-    }
-
-    mPDevice = reg.mDeviceInstance->physicalDevice();
+    // GLFW can give us what extensions it requires, nice
+    uint32_t glfwExtensionCount = 0;
+    const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+    std::vector<const char*> requiredExtensions;
+    for(uint32_t i = 0; i < glfwExtensionCount; ++i ) requiredExtensions.push_back(glfwExtensions[i]);
+    mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "vulkan-experiments", 1));
 
     // Find out what queues are available
     //auto queueFamilyProps = dev.getQueueFamilyProperties();
-    //reg.printQueueFamilyProperties(queueFamilyProps);
+    //printQueueFamilyProperties(queueFamilyProps);
 
     // Create a logical device to interact with
     // To do this we also need to specify how many queues from which families we want to create
     // In this case just 1 queue from the first family which supports graphics
 
-    mDevice = reg.mDeviceInstance->device();
-    reg.mWindowIntegration.reset(new WindowIntegration(reg.mDeviceInstance->instance(), reg.mDeviceInstance->physicalDevice(), reg.mDeviceInstance->queueFamilyIndex(), reg.mDeviceInstance->device(), mWindow));
+    mWindowIntegration.reset(new WindowIntegration(*mDeviceInstance.get(), mWindow));
 
-    // Get the queue from the device
-    // queues are the thing that actually do the work
-    // could be a subprocessor on the device, or some other subsection of capability
-    mGraphicsQueue = reg.mDeviceInstance->queue();
-    mPresentQueue = reg.mDeviceInstance->queue(); // Intentionally the same at first, shouldn't be doing it like this really as there's a chance we don't have 1 queue that supports both graphics and present
-
-    reg.createRenderPass();
-    reg.createGraphicsPipeline();
-    reg.mFrameBuffer.reset(new FrameBuffer(reg.mDeviceInstance->device(), *reg.mWindowIntegration.get(), reg.renderPass()));
+    mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get()));
+    mFrameBuffer.reset(new FrameBuffer(mDeviceInstance->device(), *mWindowIntegration.get(), mGraphicsPipeline->renderPass()));
 
     // Setup our sync primitives
     // imageAvailable - gpu: Used to stall the pipeline until the presentation has finished reading from the image
@@ -96,16 +88,16 @@ private:
     // frameInFlightFence - cpu: Used to ensure we don't schedule a second frame for each image until the last is complete
 
     // Create the semaphores we're gonna use
-    mMaxFramesInFlight = reg.mWindowIntegration->swapChainImages().size();
+    mMaxFramesInFlight = mWindowIntegration->swapChainImages().size();
     for( auto i = 0u; i < mMaxFramesInFlight; ++i ) {
-      mImageAvailableSemaphores.emplace_back( mDevice.createSemaphoreUnique({}));
-      mRenderFinishedSemaphores.emplace_back( mDevice.createSemaphoreUnique({}));
+      mImageAvailableSemaphores.emplace_back( mDeviceInstance->device().createSemaphoreUnique({}));
+      mRenderFinishedSemaphores.emplace_back( mDeviceInstance->device().createSemaphoreUnique({}));
       // Create fence in signalled state so first wait immediately returns and resets fence
-      mFrameInFlightFences.emplace_back( mDevice.createFenceUnique({vk::FenceCreateFlagBits::eSignaled}));
+      mFrameInFlightFences.emplace_back( mDeviceInstance->device().createFenceUnique({vk::FenceCreateFlagBits::eSignaled}));
     }
 
     // TODO: Misfit
-    mCommandPool = reg.mDeviceInstance->createCommandPool( { /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
+    mCommandPool = mDeviceInstance->createCommandPool( { /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
                                                  vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
                                                                                          */
                                               });
@@ -113,11 +105,11 @@ private:
     // Now make a command buffer for each framebuffer
      vk::CommandBufferAllocateInfo commandBufferAllocateInfo = {};
      commandBufferAllocateInfo.setCommandPool(mCommandPool.get())
-         .setCommandBufferCount(static_cast<uint32_t>(reg.mWindowIntegration->swapChainImages().size()))
+         .setCommandBufferCount(static_cast<uint32_t>(mWindowIntegration->swapChainImages().size()))
          .setLevel(vk::CommandBufferLevel::ePrimary)
          ;
 
-    mCommandBuffers = reg.mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
+    mCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
 
     for( auto i = 0u; i < mCommandBuffers.size(); ++i ) {
       auto commandBuffer = mCommandBuffers[i].get();
@@ -129,10 +121,10 @@ private:
 
       // Start the render pass
       vk::RenderPassBeginInfo renderPassInfo = {};
-      renderPassInfo.setRenderPass(reg.renderPass())
-                    .setFramebuffer(reg.mFrameBuffer->frameBuffers()[i].get());
+      renderPassInfo.setRenderPass(mGraphicsPipeline->renderPass())
+                    .setFramebuffer(mFrameBuffer->frameBuffers()[i].get());
       renderPassInfo.renderArea.offset = vk::Offset2D(0,0);
-      renderPassInfo.renderArea.extent = reg.mWindowIntegration->extent();
+      renderPassInfo.renderArea.extent = mWindowIntegration->extent();
       // Info for attachment load op clear
       std::array<float,4> col = {0.f,.0f,0.f,1.f};
       vk::ClearValue clearColour(col);
@@ -144,7 +136,7 @@ private:
       commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
       // Now it's time to finally draw our one crappy little triangle >.<
-      commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, reg.graphicsPipeline().get());
+      commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->graphicsPipeline().get());
       commandBuffer.draw(3, // Draw 3 vertices
                          1, // Used for instanced rendering, 1 otherwise
                          0, // First vertex
@@ -160,15 +152,13 @@ private:
   }
 
   void loop() {
-    auto& reg = Registrar::singleton();
-
     auto frameIndex = 0u;
 
     while(!glfwWindowShouldClose(mWindow)) {
       glfwPollEvents();
 
       // Wait for the last frame to finish rendering
-      mDevice.waitForFences(1, &mFrameInFlightFences[frameIndex].get(), true, std::numeric_limits<uint64_t>::max());
+      mDeviceInstance->device().waitForFences(1, &mFrameInFlightFences[frameIndex].get(), true, std::numeric_limits<uint64_t>::max());
 
       // Advance to next frame index, loop at max
       frameIndex++;
@@ -176,11 +166,11 @@ private:
 
       // Reset the fence - fences must be reset before being submitted
       auto frameFence = mFrameInFlightFences[frameIndex].get();
-      mDevice.resetFences(1, &frameFence);
+      mDeviceInstance->device().resetFences(1, &frameFence);
 
       // Acquire and image from the swap chain
-      auto imageIndex = mDevice.acquireNextImageKHR(
-            reg.mWindowIntegration->swapChain(), // Get an image from this
+      auto imageIndex = mDeviceInstance->device().acquireNextImageKHR(
+            mWindowIntegration->swapChain(), // Get an image from this
             std::numeric_limits<uint64_t>::max(), // Don't timeout
             mImageAvailableSemaphores[frameIndex].get(), // semaphore to signal once presentation is finished with the image
             vk::Fence()).value; // Dummy fence, we don't care here
@@ -211,11 +201,11 @@ private:
           ;
 
       vk::ArrayProxy<vk::SubmitInfo> submits(submitInfo);
-      // submit, signal the frame fence at the end
-      mGraphicsQueue.submit(submits.size(), submits.data(), frameFence);
+      // submit, signal the frame fence at the end      
+      mDeviceInstance->queue().submit(submits.size(), submits.data(), frameFence);
 
       // Present the results of a frame to the swap chain
-      vk::SwapchainKHR swapChains[] = {reg.mWindowIntegration->swapChain()};
+      vk::SwapchainKHR swapChains[] = {mWindowIntegration->swapChain()};
       vk::PresentInfoKHR presentInfo = {};
       presentInfo.setWaitSemaphoreCount(1)
           .setPWaitSemaphores(signalSemaphores) // Wait before presentation can start
@@ -225,13 +215,31 @@ private:
           .setPResults(nullptr)
           ;
 
-      mPresentQueue.presentKHR(presentInfo);
+      // TODO: Force-using a single queue for both graphics and present
+      // Some systems may not be able to support this
+      mDeviceInstance->queue().presentKHR(presentInfo);
     }
   }
 
   void cleanup() {
+    // Explicitly cleanup the vulkan objects here
+    // Ensure they are shut down before terminating glfw
+    // TODO: Could wrap the glfw stuff in a smart pointer and
+    // remove the need for this method
+
+    mDeviceInstance->waitAllDevicesIdle();
+
+    for(auto& p : mFrameInFlightFences) p.reset();
+    for(auto& p : mRenderFinishedSemaphores) p.reset();
+    for(auto& p : mImageAvailableSemaphores) p.reset();
+    for(auto& p : mCommandBuffers) p.reset();
+    mCommandPool.reset();
+    mGraphicsPipeline.reset();
+    mFrameBuffer.reset();
+    mWindowIntegration.reset();
+    mDeviceInstance.reset();
+
     glfwDestroyWindow(mWindow);
-    Registrar::singleton().tearDown();
     glfwTerminate();
   }
 };

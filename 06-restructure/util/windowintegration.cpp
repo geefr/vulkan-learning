@@ -1,30 +1,44 @@
 #include "windowintegration.h"
+#include "deviceinstance.h"
 
 #include <iostream>
 
-WindowIntegration::WindowIntegration(vk::Instance& instance, vk::PhysicalDevice& pDevice, uint32_t queueFamilyIndex, vk::Device& device, GLFWwindow* window) {
-  createSurfaceGLFW(instance, window);
-  createSwapChain(pDevice, queueFamilyIndex, device);
-  createSwapChainImageViews(device);
+WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance)
+  : mDeviceInstance(deviceInstance) {
 }
 
+WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance, GLFWwindow* window)
+  : WindowIntegration(deviceInstance) {
+  createSurfaceGLFW(window);
+  createSwapChain();
+  createSwapChainImageViews();
+}
+
+WindowIntegration::~WindowIntegration() {
+  for(auto& p : mSwapChainImageViews) p.reset();
+  mSwapChain.reset();
+  //mSurface.reset();
+  vkDestroySurfaceKHR(mDeviceInstance.instance(), mSurface, nullptr);
+}
 
 #ifdef USE_GLFW
-void WindowIntegration::createSurfaceGLFW(vk::Instance& instance, GLFWwindow* window) {
+void WindowIntegration::createSurfaceGLFW(GLFWwindow* window) {
   VkSurfaceKHR surface;
+  auto& instance = mDeviceInstance.instance();
   if(glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
     throw std::runtime_error("createSurfaceGLFW: Failed to create window surface");
   }
-  mSurface.reset(surface);
+  mSurface = surface;
+  //mSurface.reset(surface);
 }
 #endif
 
 
-void WindowIntegration::createSwapChain(vk::PhysicalDevice& pDevice, uint32_t queueFamilyIndex, vk::Device& device) {
-  if( !pDevice.getSurfaceSupportKHR(queueFamilyIndex, mSurface.get()) ) throw std::runtime_error("createSwapChainXlib: Physical device doesn't support surfaces");
+void WindowIntegration::createSwapChain() {
+  if( !mDeviceInstance.physicalDevice().getSurfaceSupportKHR(mDeviceInstance.queueFamilyIndex(), mSurface) ) throw std::runtime_error("createSwapChainXlib: Physical device doesn't support surfaces");
 
   // Parameters used in swapchain must comply with limits of the surface
-  auto caps = pDevice.getSurfaceCapabilitiesKHR(mSurface.get());
+  auto caps = mDeviceInstance.physicalDevice().getSurfaceCapabilitiesKHR(mSurface);
 
   // First the number of images (none, double, triple buffered)
   auto numImages = 3u;
@@ -48,14 +62,14 @@ void WindowIntegration::createSwapChain(vk::PhysicalDevice& pDevice, uint32_t qu
   // caps.supportedTransforms;
 
   // Choose a pixel format
-  auto surfaceFormats = pDevice.getSurfaceFormatsKHR(mSurface.get());
+  auto surfaceFormats = mDeviceInstance.physicalDevice().getSurfaceFormatsKHR(mSurface);
   // TODO: Just choosing the first one here..
   mSwapChainFormat = surfaceFormats.front().format;
   auto chosenColourSpace = surfaceFormats.front().colorSpace;
   mSwapChainExtent = caps.currentExtent;
   vk::SwapchainCreateInfoKHR info(
         vk::SwapchainCreateFlagsKHR(),
-        mSurface.get(),
+        mSurface,
         numImages, // Num images in the swapchain
         mSwapChainFormat, // Pixel format
         chosenColourSpace, // Colour space
@@ -70,12 +84,11 @@ void WindowIntegration::createSwapChain(vk::PhysicalDevice& pDevice, uint32_t qu
         vk::SwapchainKHR() // The old swapchain to delete
         );
 
-  mSwapChain = device.createSwapchainKHRUnique(info);
-
-  mSwapChainImages = device.getSwapchainImagesKHR(mSwapChain.get());
+  mSwapChain = mDeviceInstance.device().createSwapchainKHRUnique(info);
+  mSwapChainImages = mDeviceInstance.device().getSwapchainImagesKHR(mSwapChain.get());
 }
 
-void WindowIntegration::createSwapChainImageViews(vk::Device& device) {
+void WindowIntegration::createSwapChainImageViews() {
   for( auto i = 0u; i < mSwapChainImages.size(); ++i ) {
     vk::ImageViewCreateInfo info(
     {}, // empty flags
@@ -86,7 +99,7 @@ void WindowIntegration::createSwapChainImageViews(vk::Device& device) {
           vk::ImageSubresourceRange(
     {vk::ImageAspectFlagBits::eColor},0, 1, 0, 1)
           );
-    mSwapChainImageViews.emplace_back( device.createImageViewUnique(info) );
+    mSwapChainImageViews.emplace_back( mDeviceInstance.device().createImageViewUnique(info) );
   }
 }
 

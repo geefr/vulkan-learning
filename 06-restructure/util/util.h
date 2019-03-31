@@ -8,7 +8,7 @@ class DeviceInstance;
 class Util
 {
 public:
-  static void release();
+  static void reset();
 
   static std::string physicalDeviceTypeToString( vk::PhysicalDeviceType type  );
   static std::string vulkanAPIVersionToString( uint32_t version );
@@ -34,6 +34,7 @@ public:
   /// Flush memory/caches
   static void flushMemoryRanges( vk::ArrayProxy<const vk::MappedMemoryRange> mem );
 
+  static std::vector<char> readFile(const std::string& fileName);
 
 #ifdef DEBUG
   static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -47,6 +48,7 @@ public:
 
   static vk::DispatchLoaderDynamic mDidl;
   static vk::UniqueHandle<vk::DebugUtilsMessengerEXT, vk::DispatchLoaderDynamic> mDebugUtilsMessenger;
+  static bool mDebugCallbackValid;
 #endif
 };
 

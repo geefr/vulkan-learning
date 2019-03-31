@@ -1,8 +1,6 @@
 set( targetName "06-restructure" )
 
 add_executable(${targetName} main.cpp
-	util/registrar.h
-	util/registrar.cpp
 	util/simplebuffer.h
 	util/simplebuffer.cpp
   util/util.h
@@ -13,6 +11,8 @@ add_executable(${targetName} main.cpp
   util/framebuffer.cpp
   util/deviceinstance.h
   util/deviceinstance.cpp
+  util/graphicspipeline.h
+  util/graphicspipeline.cpp
 	)
 target_link_libraries( ${targetName} Vulkan::Vulkan glfw ${X11_LIBRARIES} )
 

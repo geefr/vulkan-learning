@@ -14,7 +14,14 @@ DeviceInstance::DeviceInstance(
   createLogicalDevice(qFlags);
 }
 
-vk::Instance& DeviceInstance::createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer) {
+DeviceInstance::~DeviceInstance() {
+  // Make sure the debug callback has been cleaned up before the vulkan instance
+  mDevice.reset();
+  Util::reset();
+  mInstance.reset();
+}
+
+void DeviceInstance::createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer) {
   // First let's validate whether the extensions we need are available
   // If not there's no point doing anything and the system can't support the program
   // Assume that if presentation extensions are enabled at compile time then they're
@@ -88,16 +95,14 @@ vk::Instance& DeviceInstance::createVulkanInstance(const std::vector<const char*
     if( propsA.apiVersion > propsB.apiVersion ) return true;
     return false;
   });
-
-  return mInstance.get();
 }
 
-vk::Device& DeviceInstance::createLogicalDevice(vk::QueueFlags qFlags ) {
+void DeviceInstance::createLogicalDevice(vk::QueueFlags qFlags ) {
   mQueueFamIndex = Util::findQueue(*this, qFlags);
-  return createLogicalDevice();
+  createLogicalDevice();
 }
 
-vk::Device& DeviceInstance::createLogicalDevice() {
+void DeviceInstance::createLogicalDevice() {
   if( mQueueFamIndex > mPhysicalDevices.size() ) throw std::runtime_error("createLogicalDevice: Physical device doesn't support required queue types");
 
   auto supportedExtensions = mPhysicalDevices.front().enumerateDeviceExtensionProperties();
@@ -152,8 +157,6 @@ vk::Device& DeviceInstance::createLogicalDevice() {
   mDevice = mPhysicalDevices.front().createDeviceUnique(info);
 
   mQueues.emplace_back( mDevice->getQueue(mQueueFamIndex, 0) );
-
-  return mDevice.get();
 }
 
 void DeviceInstance::waitAllDevicesIdle() {

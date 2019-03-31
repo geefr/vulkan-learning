@@ -1,16 +1,18 @@
 #include "util.h"
+#include "deviceinstance.h"
 
 #include <iostream>
-
-#include "deviceinstance.h"
+#include <fstream>
 
 #ifdef DEBUG
   vk::DispatchLoaderDynamic Util::mDidl;
   vk::UniqueHandle<vk::DebugUtilsMessengerEXT, vk::DispatchLoaderDynamic> Util::mDebugUtilsMessenger;
+  bool Util::mDebugCallbackValid;
 #endif
-void Util::release() {
+void Util::reset() {
 #ifdef DEBUG
-  mDebugUtilsMessenger.release();
+  mDebugUtilsMessenger.reset();
+  mDebugCallbackValid = false;
 #endif
 }
 
@@ -137,5 +139,16 @@ void Util::initDebugMessenger( vk::Instance& instance ) {
         );
 
   mDebugUtilsMessenger = instance.createDebugUtilsMessengerEXTUnique(cbInfo, nullptr, mDidl);
+  mDebugCallbackValid = true;
 }
 
+std::vector<char> Util::readFile(const std::string& fileName) {
+  std::ifstream file(fileName, std::ios::ate | std::ios::binary);
+  if( !file.is_open() ) throw std::runtime_error("Failed to open file: " + fileName);
+  auto fileSize = file.tellg(); // We started at the end
+  std::vector<char> buf(fileSize);
+  file.seekg(0);
+  file.read(buf.data(), fileSize);
+  file.close();
+  return buf;
+}

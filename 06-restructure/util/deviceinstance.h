@@ -17,7 +17,7 @@ public:
   DeviceInstance() = delete;
   DeviceInstance(const DeviceInstance&) = delete;
   DeviceInstance(DeviceInstance&&) = delete;
-  ~DeviceInstance() = default;
+  ~DeviceInstance();
 
   /**
    * The everything constructor
@@ -64,9 +64,9 @@ public:
 
 
 private:
-  vk::Instance& createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer = VK_API_VERSION_1_0);
-  vk::Device& createLogicalDevice(vk::QueueFlags qFlags);
-  vk::Device& createLogicalDevice();
+  void createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer = VK_API_VERSION_1_0);
+  void createLogicalDevice(vk::QueueFlags qFlags);
+  void createLogicalDevice();
 
 
   std::vector<vk::PhysicalDevice> mPhysicalDevices;

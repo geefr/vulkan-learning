@@ -9,6 +9,8 @@
 #endif
 #include <vulkan/vulkan.hpp>
 
+class DeviceInstance;
+
 /**
  * Functionality for window system integration, swapchains and such
  */
@@ -16,12 +18,13 @@ class WindowIntegration
 {
 public:
   WindowIntegration() = delete;
+  WindowIntegration(DeviceInstance& deviceInstance);
   WindowIntegration(const WindowIntegration&) = delete;
   WindowIntegration(WindowIntegration&&) = default;
-  ~WindowIntegration() = default;
+  ~WindowIntegration();
 
 #ifdef USE_GLFW
-  WindowIntegration(vk::Instance& instance, vk::PhysicalDevice& pDevice, uint32_t queueFamilyIndex, vk::Device& device, GLFWwindow* window);
+  WindowIntegration(DeviceInstance& deviceInstance, GLFWwindow* window);
 #endif
 
   // TODO: Giving direct access like this is dangerous, clean this up
@@ -33,20 +36,30 @@ public:
 
 private:
 #ifdef USE_GLFW
-  void createSurfaceGLFW(vk::Instance& instance, GLFWwindow* window);
+  void createSurfaceGLFW(GLFWwindow* window);
 #endif
 
-  void createSwapChain(vk::PhysicalDevice& pDevice, uint32_t queueFamilyIndex, vk::Device& device);
-  void createSwapChainImageViews(vk::Device& device);
+  void createSwapChain();
+  void createSwapChainImageViews();
+
+  DeviceInstance& mDeviceInstance;
 
   // These members 'owned' by the unique pointers below
   vk::Format mSwapChainFormat = vk::Format::eUndefined;
   vk::Extent2D mSwapChainExtent;
   std::vector<vk::Image> mSwapChainImages;
 
+  // TODO: >.< For some reason trying to use a UniqueSurfaceKHR here
+  // messes up, and we end up with the wrong value for mSurface.m_owner
+  // This causes a segfault when destroying the surface as it's calling
+  // a function on an invalid surface
+  // Maybe it's best to just use the raw types here, the smart pointers
+  // are proving to be tricky and as we're still having to manually reset
+  // them there's not much point using them in the first place
+  vk::SurfaceKHR mSurface;
+
   // Order of members matters for Unique pointers
   // will be destructed in reverse order
-  vk::UniqueSurfaceKHR mSurface;
   vk::UniqueSwapchainKHR mSwapChain;
   std::vector<vk::UniqueImageView> mSwapChainImageViews;
 };
