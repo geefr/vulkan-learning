@@ -42,8 +42,11 @@ private:
   vk::CommandPool mCommandPool;
   std::vector<vk::UniqueCommandBuffer> mCommandBuffers;
 
-  vk::UniqueSemaphore mImageAvailableSemaphore;
-  vk::UniqueSemaphore mRenderFinishedSemaphore;
+  uint32_t mMaxFramesInFlight = 3u;
+  std::vector<vk::UniqueSemaphore> mImageAvailableSemaphores;
+  std::vector<vk::UniqueSemaphore> mRenderFinishedSemaphores;
+  std::vector<vk::UniqueFence> mFrameInFlightFences;
+
 
   void initWindow() {
     glfwInit();
@@ -114,9 +117,19 @@ private:
     reg.createGraphicsPipeline();
     reg.createFramebuffers();
 
+    // Setup our sync primitives
+    // imageAvailable - gpu: Used to stall the pipeline until the presentation has finished reading from the image
+    // renderFinished - gpu: Used to stall presentation until the pipeline is finished
+    // frameInFlightFence - cpu: Used to ensure we don't schedule a second frame for each image until the last is complete
+
     // Create the semaphores we're gonna use
-    mImageAvailableSemaphore = mDevice.createSemaphoreUnique({});
-    mRenderFinishedSemaphore = mDevice.createSemaphoreUnique({});
+    mMaxFramesInFlight = reg.swapChainImages().size();
+    for( auto i = 0u; i < mMaxFramesInFlight; ++i ) {
+      mImageAvailableSemaphores.emplace_back( mDevice.createSemaphoreUnique({}));
+      mRenderFinishedSemaphores.emplace_back( mDevice.createSemaphoreUnique({}));
+      // Create fence in signalled state so first wait immediately returns and resets fence
+      mFrameInFlightFences.emplace_back( mDevice.createFenceUnique({vk::FenceCreateFlagBits::eSignaled}));
+    }
 
     // TODO: Misfit
     mCommandPool = reg.createCommandPool( { /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
@@ -176,21 +189,30 @@ private:
   void loop() {
     auto& reg = Registrar::singleton();
 
+    auto frameIndex = 0u;
+
     while(!glfwWindowShouldClose(mWindow)) {
       glfwPollEvents();
+
+      // Wait for the last frame to finish rendering
+      mDevice.waitForFences(1, &mFrameInFlightFences[frameIndex].get(), true, std::numeric_limits<uint64_t>::max());
+
+      // Advance to next frame index, loop at max
+      frameIndex++;
+      if( frameIndex == mMaxFramesInFlight ) frameIndex = 0;
 
       // Acquire and image from the swap chain
       auto imageIndex = mDevice.acquireNextImageKHR(
             reg.swapChain(), // Get an image from this
             std::numeric_limits<uint64_t>::max(), // Don't timeout
-            mImageAvailableSemaphore.get(), // semaphore to signal once presentation is finished with the image
+            mImageAvailableSemaphores[frameIndex].get(), // semaphore to signal once presentation is finished with the image
             vk::Fence()).value; // Dummy fence, we don't care here
 
       // Submit the command buffer
       vk::SubmitInfo submitInfo = {};
       auto commandBuffer = mCommandBuffers[imageIndex].get();
       // Don't execute until this is ready
-      vk::Semaphore waitSemaphores[] = {mImageAvailableSemaphore.get()};
+      vk::Semaphore waitSemaphores[] = {mImageAvailableSemaphores[frameIndex].get()};
       // place the wait before writing to the colour attachment
 
       // If we have render pass depedencies
@@ -201,7 +223,7 @@ private:
 
 
       // Signal this semaphore when rendering is done
-      vk::Semaphore signalSemaphores[] = {mRenderFinishedSemaphore.get()};
+      vk::Semaphore signalSemaphores[] = {mRenderFinishedSemaphores[frameIndex].get()};
       submitInfo.setWaitSemaphoreCount(1)
           .setPWaitSemaphores(waitSemaphores)
           .setPWaitDstStageMask(waitStages)
@@ -212,7 +234,8 @@ private:
           ;
 
       vk::ArrayProxy<vk::SubmitInfo> submits(submitInfo);
-      mGraphicsQueue.submit(submits.size(), submits.data(), vk::Fence());
+      // submit, signal the frame fence at the end
+      mGraphicsQueue.submit(submits.size(), submits.data(), mFrameInFlightFences[frameIndex].get());
 
       // Present the results of a frame to the swap chain
       vk::SwapchainKHR swapChains[] = {reg.swapChain()};
@@ -226,9 +249,6 @@ private:
           ;
 
       mPresentQueue.presentKHR(presentInfo);
-
-      // Wait until everything is finished (Not efficient, but avoids filling up the queue into infinity :P)
-      mPresentQueue.waitIdle();
     }
   }
 
