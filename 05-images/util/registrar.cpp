@@ -32,8 +32,9 @@ void Registrar::tearDown() {
   mSurface.release();
   for( auto& p : mCommandPools ) p.release();
   mDevice.release();
-
+#ifdef DEBUG
   mDebugUtilsMessenger.release();
+#endif
 
   mInstance.release();
 
@@ -721,6 +722,7 @@ vk::UniqueShaderModule Registrar::createShaderModule(const std::string& fileName
   return mDevice->createShaderModuleUnique(info);
 }
 
+#ifdef DEBUG
 VKAPI_ATTR VkBool32 VKAPI_CALL Registrar::debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -732,3 +734,4 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Registrar::debugCallback(
 
   return VK_FALSE;
 }
+#endif

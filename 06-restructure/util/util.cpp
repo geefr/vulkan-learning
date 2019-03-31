@@ -88,6 +88,7 @@ void Util::printQueueFamilyProperties( std::vector<vk::QueueFamilyProperties>& p
   }
 }
 
+#ifdef DEBUG
 VKAPI_ATTR VkBool32 VKAPI_CALL Util::debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -99,7 +100,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Util::debugCallback(
 
   return VK_FALSE;
 }
-
+#endif
 
 void Util::ensureExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName) {
   if( std::find_if(extensions.begin(), extensions.end(), [&](auto& e) {
@@ -118,7 +119,7 @@ uint32_t Util::findQueue(DeviceInstance& device, vk::QueueFlags requiredFlags) {
 }
 
 
-
+#ifdef DEBUG
 void Util::initDidl( vk::Instance& instance ) {
   mDidl.init(instance, ::vkGetInstanceProcAddr);
 }
@@ -141,6 +142,7 @@ void Util::initDebugMessenger( vk::Instance& instance ) {
   mDebugUtilsMessenger = instance.createDebugUtilsMessengerEXTUnique(cbInfo, nullptr, mDidl);
   mDebugCallbackValid = true;
 }
+#endif
 
 std::vector<char> Util::readFile(const std::string& fileName) {
   std::ifstream file(fileName, std::ios::ate | std::ios::binary);

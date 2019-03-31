@@ -1,6 +1,9 @@
 set( targetName "06-restructure" )
 
-add_executable(${targetName} main.cpp
+add_executable(${targetName}
+  main.cpp
+  vulkanapp.h
+  vulkanapp.cpp
 	util/simplebuffer.h
 	util/simplebuffer.cpp
   util/util.h
