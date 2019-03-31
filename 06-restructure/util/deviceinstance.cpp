@@ -2,7 +2,7 @@
 
 #include "util.h"
 
-AppDeviceInstance::AppDeviceInstance(
+DeviceInstance::DeviceInstance(
     const std::vector<const char*>& requiredInstanceExtensions,
     const std::vector<const char*>& requiredDeviceExtensions,
     const std::string& appName,
@@ -14,7 +14,7 @@ AppDeviceInstance::AppDeviceInstance(
   createLogicalDevice(qFlags);
 }
 
-vk::Instance& AppDeviceInstance::createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer) {
+vk::Instance& DeviceInstance::createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer) {
   // First let's validate whether the extensions we need are available
   // If not there's no point doing anything and the system can't support the program
   // Assume that if presentation extensions are enabled at compile time then they're
@@ -92,12 +92,12 @@ vk::Instance& AppDeviceInstance::createVulkanInstance(const std::vector<const ch
   return mInstance.get();
 }
 
-vk::Device& AppDeviceInstance::createLogicalDevice(vk::QueueFlags qFlags ) {
-  mQueueFamIndex = Util::findQueue(mPhysicalDevices.front(), qFlags);
+vk::Device& DeviceInstance::createLogicalDevice(vk::QueueFlags qFlags ) {
+  mQueueFamIndex = Util::findQueue(*this, qFlags);
   return createLogicalDevice();
 }
 
-vk::Device& AppDeviceInstance::createLogicalDevice() {
+vk::Device& DeviceInstance::createLogicalDevice() {
   if( mQueueFamIndex > mPhysicalDevices.size() ) throw std::runtime_error("createLogicalDevice: Physical device doesn't support required queue types");
 
   auto supportedExtensions = mPhysicalDevices.front().enumerateDeviceExtensionProperties();
@@ -156,6 +156,74 @@ vk::Device& AppDeviceInstance::createLogicalDevice() {
   return mDevice.get();
 }
 
-void AppDeviceInstance::waitAllDevicesIdle() {
+void DeviceInstance::waitAllDevicesIdle() {
   mDevice->waitIdle();
 }
+
+
+vk::UniqueCommandPool DeviceInstance::createCommandPool( vk::CommandPoolCreateFlags flags ) {
+  vk::CommandPoolCreateInfo info(flags, mQueueFamIndex); // TODO: Hack! should be passed by caller/some reference to the command queue class we don't have yet
+  return mDevice->createCommandPoolUnique(info);
+}
+
+vk::UniqueBuffer DeviceInstance::createBuffer( vk::DeviceSize size, vk::BufferUsageFlags usageFlags ) {
+  // Exclusive buffer of size, for usageFlags
+  vk::BufferCreateInfo info(
+        vk::BufferCreateFlags(),
+        size,
+        usageFlags
+        );
+  return mDevice->createBufferUnique(info);
+}
+
+/// Select a device memory heap based on flags (vk::MemoryRequirements::memoryTypeBits)
+uint32_t DeviceInstance::selectDeviceMemoryHeap( vk::MemoryRequirements memoryRequirements, vk::MemoryPropertyFlags requiredFlags ) {
+  // Initial implementation doesn't have any real requirements, just select the first compatible heap
+  vk::PhysicalDeviceMemoryProperties memoryProperties = mPhysicalDevices.front().getMemoryProperties();
+
+  for(uint32_t memType = 0u; memType < 32; ++memType) {
+    uint32_t memTypeBit = 1 << memType;
+    if( memoryRequirements.memoryTypeBits & memTypeBit ) {
+      auto deviceMemType = memoryProperties.memoryTypes[memType];
+      if( (deviceMemType.propertyFlags & requiredFlags ) == requiredFlags ) {
+        return memType;
+      }
+    }
+  }
+  throw std::runtime_error("Failed to find suitable heap type for flags: " + vk::to_string(requiredFlags));
+}
+
+/// Allocate device memory suitable for the specified buffer
+vk::UniqueDeviceMemory DeviceInstance::allocateDeviceMemoryForBuffer( vk::Buffer& buffer, vk::MemoryPropertyFlags userReqs ) {
+  // Find out what kind of memory the buffer needs
+  vk::MemoryRequirements memReq = mDevice->getBufferMemoryRequirements(buffer);
+
+  auto heapIdx = selectDeviceMemoryHeap(memReq, userReqs );
+
+  vk::MemoryAllocateInfo info(
+        memReq.size,
+        heapIdx);
+
+  return mDevice->allocateMemoryUnique(info);
+}
+
+/// Bind memory to a buffer
+void DeviceInstance::bindMemoryToBuffer(vk::Buffer& buffer, vk::DeviceMemory& memory, vk::DeviceSize offset) {
+  mDevice->bindBufferMemory(buffer, memory, offset);
+}
+
+/// Map a region of device memory to host memory
+void* DeviceInstance::mapMemory( vk::DeviceMemory& deviceMem, vk::DeviceSize offset, vk::DeviceSize size ) {
+  return mDevice->mapMemory(deviceMem, offset, size);
+}
+
+/// Unmap a region of device memory
+void DeviceInstance::unmapMemory( vk::DeviceMemory& deviceMem ) {
+  mDevice->unmapMemory(deviceMem);
+}
+
+/// Flush memory/caches
+void DeviceInstance::flushMemoryRanges( vk::ArrayProxy<const vk::MappedMemoryRange> mem ) {
+  mDevice->flushMappedMemoryRanges(mem.size(), mem.data());
+}
+

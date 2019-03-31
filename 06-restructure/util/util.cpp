@@ -2,6 +2,7 @@
 
 #include <iostream>
 
+#include "deviceinstance.h"
 
 #ifdef DEBUG
   vk::DispatchLoaderDynamic Util::mDidl;
@@ -32,9 +33,9 @@ std::string Util::vulkanAPIVersionToString( uint32_t version ) {
   return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
 }
 
-void Util::printPhysicalDeviceProperties( vk::PhysicalDevice& device ) {
+void Util::printPhysicalDeviceProperties( DeviceInstance& device ) {
   vk::PhysicalDeviceProperties props;
-  device.getProperties(&props);
+  device.physicalDevice().getProperties(&props);
 
   std::cout << "==== Physical Device Properties ====" << "\n"
             << "API Version    :" << vulkanAPIVersionToString(props.apiVersion) << "\n"
@@ -48,9 +49,9 @@ void Util::printPhysicalDeviceProperties( vk::PhysicalDevice& device ) {
             << std::endl;
 }
 
-void Util::printDetailedPhysicalDeviceInfo( vk::PhysicalDevice& device ) {
+void Util::printDetailedPhysicalDeviceInfo( DeviceInstance& device ) {
   vk::PhysicalDeviceMemoryProperties props;
-  device.getMemoryProperties(&props);
+  device.physicalDevice().getMemoryProperties(&props);
 
   // Information on device memory
   std::cout << "== Device Memory ==" << "\n"
@@ -104,8 +105,8 @@ void Util::ensureExtension(const std::vector<vk::ExtensionProperties>& extension
 }) == extensions.end()) throw std::runtime_error("Extension not supported: " + extensionName);
 }
 
-uint32_t Util::findQueue(vk::PhysicalDevice& device, vk::QueueFlags requiredFlags) {
-  auto qFamProps = device.getQueueFamilyProperties();
+uint32_t Util::findQueue(DeviceInstance& device, vk::QueueFlags requiredFlags) {
+  auto qFamProps = device.physicalDevice().getQueueFamilyProperties();
   auto it = std::find_if(qFamProps.begin(), qFamProps.end(), [&](auto& p) {
     if( p.queueFlags & requiredFlags ) return true;
     return false;
@@ -137,3 +138,4 @@ void Util::initDebugMessenger( vk::Instance& instance ) {
 
   mDebugUtilsMessenger = instance.createDebugUtilsMessengerEXTUnique(cbInfo, nullptr, mDidl);
 }
+

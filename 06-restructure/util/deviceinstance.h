@@ -1,5 +1,5 @@
-#ifndef APPDEVICEINSTANCE_H
-#define APPDEVICEINSTANCE_H
+#ifndef DEVICEINSTANCE_H
+#define DEVICEINSTANCE_H
 
 #include <vulkan/vulkan.hpp>
 
@@ -11,13 +11,13 @@
  * - Selection of a physical device
  * - creation of logical device
  */
-class AppDeviceInstance
+class DeviceInstance
 {
 public:
-  AppDeviceInstance() = delete;
-  AppDeviceInstance(const AppDeviceInstance&) = delete;
-  AppDeviceInstance(AppDeviceInstance&&) = delete;
-  ~AppDeviceInstance() = default;
+  DeviceInstance() = delete;
+  DeviceInstance(const DeviceInstance&) = delete;
+  DeviceInstance(DeviceInstance&&) = delete;
+  ~DeviceInstance() = default;
 
   /**
    * The everything constructor
@@ -26,7 +26,7 @@ public:
    * There should be callbacks and such to let the application interact with the startup process and make decisions based
    * on information that's unknown when this class starts construction
    */
-  AppDeviceInstance(
+  DeviceInstance(
       const std::vector<const char*>& requiredInstanceExtensions,
       const std::vector<const char*>& requiredDeviceExtensions,
       const std::string& appName,
@@ -45,6 +45,24 @@ public:
   /// Wait until all physical devices are idle
   void waitAllDevicesIdle();
 
+
+  // Buffer/etc creation functions
+  vk::UniqueCommandPool createCommandPool( vk::CommandPoolCreateFlags flags );
+  vk::UniqueBuffer createBuffer( vk::DeviceSize size, vk::BufferUsageFlags usageFlags );
+  /// Select a device memory heap based on flags (vk::MemoryRequirements::memoryTypeBits)
+  uint32_t selectDeviceMemoryHeap( vk::MemoryRequirements memoryRequirements, vk::MemoryPropertyFlags requiredFlags );
+  /// Allocate device memory suitable for the specified buffer
+  vk::UniqueDeviceMemory allocateDeviceMemoryForBuffer( vk::Buffer& buffer, vk::MemoryPropertyFlags userReqs );
+  /// Bind memory to a buffer
+  void bindMemoryToBuffer(vk::Buffer& buffer, vk::DeviceMemory& memory, vk::DeviceSize offset);
+  /// Map a region of device memory to host memory
+  void* mapMemory( vk::DeviceMemory& deviceMem, vk::DeviceSize offset, vk::DeviceSize size );
+  /// Unmap a region of device memory
+  void unmapMemory( vk::DeviceMemory& deviceMem );
+  /// Flush memory/caches
+  void flushMemoryRanges( vk::ArrayProxy<const vk::MappedMemoryRange> mem );
+
+
 private:
   vk::Instance& createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer = VK_API_VERSION_1_0);
   vk::Device& createLogicalDevice(vk::QueueFlags qFlags);
@@ -62,4 +80,4 @@ private:
   std::vector<vk::Queue> mQueues;
 };
 
-#endif // APPDEVICEINSTANCE_H
+#endif // DEVICEINSTANCE_H

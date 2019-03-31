@@ -3,6 +3,8 @@
 
 #include <vulkan/vulkan.hpp>
 
+class DeviceInstance;
+
 /**
  * A very simple class for managing buffers
  * - One buffer for each piece of data
@@ -21,6 +23,7 @@ public:
    * Each buffer will have a separate memory allocation
    */
   SimpleBuffer(
+      DeviceInstance& deviceInstance,
       vk::DeviceSize size,
       vk::BufferUsageFlags usageFlags,
       vk::MemoryPropertyFlags memFlags = {vk::MemoryPropertyFlagBits::eHostVisible});
@@ -34,6 +37,8 @@ public:
 
 private:
   SimpleBuffer() = delete;
+
+  DeviceInstance& mDeviceInstance;
   vk::UniqueBuffer mBuffer;
   vk::UniqueDeviceMemory mDeviceMemory;
   vk::DeviceSize mSize;

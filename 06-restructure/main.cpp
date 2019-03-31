@@ -39,7 +39,7 @@ private:
   vk::Device mDevice;
   vk::Queue mGraphicsQueue;
   vk::Queue mPresentQueue;
-  vk::CommandPool mCommandPool;
+  vk::UniqueCommandPool mCommandPool;
   std::vector<vk::UniqueCommandBuffer> mCommandBuffers;
 
   uint32_t mMaxFramesInFlight = 3u;
@@ -64,7 +64,7 @@ private:
       const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
       std::vector<const char*> requiredExtensions;
       for(uint32_t i = 0; i < glfwExtensionCount; ++i ) requiredExtensions.push_back(glfwExtensions[i]);
-      reg.mDeviceInstance.reset(new AppDeviceInstance(requiredExtensions, {}, "vulkan-experiments", 1));
+      reg.mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "vulkan-experiments", 1));
     }
 
     mPDevice = reg.mDeviceInstance->physicalDevice();
@@ -105,14 +105,14 @@ private:
     }
 
     // TODO: Misfit
-    mCommandPool = reg.createCommandPool( { /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
+    mCommandPool = reg.mDeviceInstance->createCommandPool( { /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
                                                  vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
                                                                                          */
                                               });
 
     // Now make a command buffer for each framebuffer
      vk::CommandBufferAllocateInfo commandBufferAllocateInfo = {};
-     commandBufferAllocateInfo.setCommandPool(mCommandPool)
+     commandBufferAllocateInfo.setCommandPool(mCommandPool.get())
          .setCommandBufferCount(static_cast<uint32_t>(reg.mWindowIntegration->swapChainImages().size()))
          .setLevel(vk::CommandBufferLevel::ePrimary)
          ;

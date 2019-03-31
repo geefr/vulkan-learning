@@ -35,21 +35,6 @@ public:
 
   void tearDown();
 
-  vk::CommandPool& createCommandPool( vk::CommandPoolCreateFlags flags );
-  vk::UniqueBuffer createBuffer( vk::DeviceSize size, vk::BufferUsageFlags usageFlags );
-  /// Select a device memory heap based on flags (vk::MemoryRequirements::memoryTypeBits)
-  uint32_t selectDeviceMemoryHeap( vk::MemoryRequirements memoryRequirements, vk::MemoryPropertyFlags requiredFlags );
-  /// Allocate device memory suitable for the specified buffer
-  vk::UniqueDeviceMemory allocateDeviceMemoryForBuffer( vk::Buffer& buffer, vk::MemoryPropertyFlags userReqs = {} );
-  /// Bind memory to a buffer
-  void bindMemoryToBuffer(vk::Buffer& buffer, vk::DeviceMemory& memory, vk::DeviceSize offset = 0);
-  /// Map a region of device memory to host memory
-  void* mapMemory( vk::DeviceMemory& deviceMem, vk::DeviceSize offset, vk::DeviceSize size );
-  /// Unmap a region of device memory
-  void unmapMemory( vk::DeviceMemory& deviceMem );
-  /// Flush memory/caches
-  void flushMemoryRanges( vk::ArrayProxy<const vk::MappedMemoryRange> mem );
-
   void createRenderPass();
   void createGraphicsPipeline();
 
@@ -59,7 +44,7 @@ public:
 
   // Our classyboys to obfuscate the verbosity somewhat
   // Public in reg for now as reg is doing the cleanup right now..
-  std::unique_ptr<AppDeviceInstance> mDeviceInstance;
+  std::unique_ptr<DeviceInstance> mDeviceInstance;
   std::unique_ptr<WindowIntegration> mWindowIntegration;
   std::unique_ptr<FrameBuffer> mFrameBuffer;
 
