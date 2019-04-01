@@ -102,12 +102,14 @@ void GraphicsPipeline::createGraphicsPipeline() {
    */
   // Vertex input
   // For now nothing here as vertices are hardcoded in the shader
+  uint32_t numVertexBindings = static_cast<uint32_t>(mVertexInputBindings.size());
+  uint32_t numVertexAttributes = static_cast<uint32_t>(mVertexInputAttributes.size());
   auto vertInputInfo = vk::PipelineVertexInputStateCreateInfo()
       .setFlags({})
-      .setVertexBindingDescriptionCount(0)
-      .setPVertexBindingDescriptions(nullptr)
-      .setVertexAttributeDescriptionCount(0)
-      .setPVertexAttributeDescriptions(nullptr)
+      .setVertexBindingDescriptionCount(numVertexBindings)
+      .setPVertexBindingDescriptions(numVertexBindings ? mVertexInputBindings.data() : nullptr)
+      .setVertexAttributeDescriptionCount(numVertexAttributes)
+      .setPVertexAttributeDescriptions(numVertexAttributes ? mVertexInputAttributes.data() : nullptr)
       ;
 
   // Input assembly

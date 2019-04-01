@@ -47,6 +47,11 @@ public:
   vk::RenderPass& renderPass() { return mRenderPass.get(); }
   vk::Pipeline& pipeline() { return mPipeline.get(); }
 
+  /// Vertex input bindings
+  std::vector<vk::VertexInputBindingDescription>& vertexInputBindings() { return mVertexInputBindings; }
+  /// Vertex input attribute descriptions
+  std::vector<vk::VertexInputAttributeDescription>& vertexInputAttributes() { return mVertexInputAttributes; }
+
 private:
   void createRenderPass();
   void createGraphicsPipeline();
@@ -56,6 +61,8 @@ private:
   DeviceInstance& mDeviceInstance;
 
   GraphicsPipeline::Shaders mShaders;
+  std::vector<vk::VertexInputBindingDescription> mVertexInputBindings;
+  std::vector<vk::VertexInputAttributeDescription> mVertexInputAttributes;
 
   vk::UniquePipelineLayout mPipelineLayout;
   vk::UniqueRenderPass mRenderPass;

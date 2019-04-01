@@ -17,6 +17,9 @@
 
 #include <iostream>
 #include <stdexcept>
+#include <vector>
+#include <map>
+#include <string>
 
 class FrameBuffer;
 class SimpleBuffer;
@@ -37,9 +40,16 @@ public:
     cleanup();
   }
 
+  struct VertexData
+  {
+    float vertCoord[3] = {0.f,0.f,0.f};
+    float vertColour[4] = {0.f,0.f,0.f,0.f};
+  };
+
 private:
   void initWindow();
   void initVK();
+  void createVertexBuffers();
   void loop();
   void cleanup();
 
@@ -47,6 +57,8 @@ private:
   GLFWwindow* mWindow = nullptr;
   int mWindowWidth = 800;
   int mWindowHeight = 600;
+
+  std::map<std::string, std::unique_ptr<SimpleBuffer>> mVertexBuffers;
 
   // Our classyboys to obfuscate the verbosity of vulkan somewhat
   // Remember deletion order matters

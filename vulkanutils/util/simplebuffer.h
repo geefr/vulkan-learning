@@ -34,6 +34,7 @@ public:
   void flush();
 
   vk::Buffer& buffer();
+  vk::DeviceSize size() const { return mSize; }
 
 private:
   SimpleBuffer() = delete;

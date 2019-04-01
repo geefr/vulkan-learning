@@ -30,13 +30,28 @@ void VulkanApp::initVK() {
 
   mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get()));
 
-  // Load our shaders and build the pipeline
-  // In this case we can throw away the shader modules after building, nothing fancy
+  // Build the graphics pipeline
+  // In this case we can throw away the shader modules after building as they're only used by the one pipeline
   {
     auto vertShader = mGraphicsPipeline->createShaderModule("vert.spv");
     auto fragShader = mGraphicsPipeline->createShaderModule("frag.spv");
     mGraphicsPipeline->shaders().mVertexShader = vertShader.get();
     mGraphicsPipeline->shaders().mFragmentShader = fragShader.get();
+
+    // The layout of our vertex buffers
+    auto vertBufferBinding = vk::VertexInputBindingDescription()
+        .setBinding(0)
+        .setStride(sizeof(VertexData))
+        .setInputRate(vk::VertexInputRate::eVertex);
+    mGraphicsPipeline->vertexInputBindings().emplace_back(vertBufferBinding);
+
+    // Location, Binding, Format, Offset
+    mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(VertexData, vertCoord));
+    mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(VertexData, vertColour));
+
+    // Create and upload vertex buffers
+    createVertexBuffers();
+
     mGraphicsPipeline->build();
   }
 
@@ -98,7 +113,13 @@ void VulkanApp::initVK() {
 
     // Now it's time to finally draw our one crappy little triangle >.<
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->pipeline());
-    commandBuffer.draw(3, // Draw 3 vertices
+
+    auto& vertBuf = mVertexBuffers["triangle"];
+    //auto& vertBuf = mVertexBuffers["rectangle"];
+    vk::Buffer buffers[] = { vertBuf->buffer() };
+    vk::DeviceSize offsets[] = { 0 };
+    commandBuffer.bindVertexBuffers(0, 1, buffers, offsets);
+    commandBuffer.draw(static_cast<uint32_t>(vertBuf->size() / sizeof(VertexData)), // Draw n vertices
                        1, // Used for instanced rendering, 1 otherwise
                        0, // First vertex
                        0  // First instance
@@ -109,6 +130,48 @@ void VulkanApp::initVK() {
 
     // End the command buffer
     commandBuffer.end();
+  }
+}
+
+void VulkanApp::createVertexBuffers() {
+  // A pretty triangle
+  {
+    VertexData vertData[] = {
+      {{0,-.5,0},{1,0,0,1}},
+      {{-.5,.5,0},{0,1,0,1}},
+      {{.5,.5,0},{0,0,1,1}},
+    };
+    mVertexBuffers["triangle"].reset( new SimpleBuffer(
+                                        *mDeviceInstance.get(),
+                                        sizeof(vertData),
+                                        vk::BufferUsageFlagBits::eVertexBuffer) );
+    auto& vertBuffer = mVertexBuffers["triangle"];
+
+    std::memcpy(vertBuffer->map(), vertData, sizeof(vertData));
+    vertBuffer->flush();
+    vertBuffer->unmap();
+  }
+
+  // A pretty quad
+  {
+    VertexData vertData[] = {
+      {{-.5,-.5,0},{1,0,0,1}},
+      {{-.5,.5,0},{0,1,0,1}},
+      {{ .5,-.5,0},{0,0,1,1}},
+
+      {{ .5,-.5,0},{0,0,1,1}},
+      {{-.5,.5,0},{0,1,0,1}},
+      {{.5,.5,0},{1,0,1,.5}},
+    };
+    mVertexBuffers["rectangle"].reset( new SimpleBuffer(
+                                        *mDeviceInstance.get(),
+                                        sizeof(vertData),
+                                        vk::BufferUsageFlagBits::eVertexBuffer) );
+    auto& vertBuffer = mVertexBuffers["rectangle"];
+
+    std::memcpy(vertBuffer->map(), vertData, sizeof(vertData));
+    vertBuffer->flush();
+    vertBuffer->unmap();
   }
 }
 
