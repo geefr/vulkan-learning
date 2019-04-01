@@ -46,11 +46,14 @@ public:
 
   vk::RenderPass& renderPass() { return mRenderPass.get(); }
   vk::Pipeline& pipeline() { return mPipeline.get(); }
+  vk::PipelineLayout& pipelineLayout() { return mPipelineLayout.get(); }
 
   /// Vertex input bindings
   std::vector<vk::VertexInputBindingDescription>& vertexInputBindings() { return mVertexInputBindings; }
   /// Vertex input attribute descriptions
   std::vector<vk::VertexInputAttributeDescription>& vertexInputAttributes() { return mVertexInputAttributes; }
+  /// Push Constants
+  std::vector<vk::PushConstantRange>& pushConstants() { return mPushConstants; }
 
 private:
   void createRenderPass();
@@ -63,6 +66,7 @@ private:
   GraphicsPipeline::Shaders mShaders;
   std::vector<vk::VertexInputBindingDescription> mVertexInputBindings;
   std::vector<vk::VertexInputAttributeDescription> mVertexInputAttributes;
+  std::vector<vk::PushConstantRange> mPushConstants;
 
   vk::UniquePipelineLayout mPipelineLayout;
   vk::UniqueRenderPass mRenderPass;

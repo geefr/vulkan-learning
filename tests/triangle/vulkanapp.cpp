@@ -49,6 +49,13 @@ void VulkanApp::initVK() {
     mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(VertexData, vertCoord));
     mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(VertexData, vertColour));
 
+    // Register our push constant block
+    mPushConstant_test_range = vk::PushConstantRange()
+        .setStageFlags(vk::ShaderStageFlagBits::eVertex)
+        .setOffset(0)
+        .setSize(sizeof(PushConstant_test));
+    mGraphicsPipeline->pushConstants().emplace_back(mPushConstant_test_range);
+
     // Create and upload vertex buffers
     createVertexBuffers();
 
@@ -113,6 +120,16 @@ void VulkanApp::initVK() {
 
     // Now it's time to finally draw our one crappy little triangle >.<
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->pipeline());
+
+    // Set our push constants
+    PushConstant_test pushConstants = {1.5};
+    commandBuffer.pushConstants(
+          mGraphicsPipeline->pipelineLayout(),
+          mPushConstant_test_range.stageFlags,
+          mPushConstant_test_range.offset,
+          sizeof(PushConstant_test),
+          &pushConstants);
+
 
     auto& vertBuf = mVertexBuffers["triangle"];
     //auto& vertBuf = mVertexBuffers["rectangle"];
@@ -206,6 +223,7 @@ void VulkanApp::loop() {
     // Submit the command buffer
     vk::SubmitInfo submitInfo = {};
     auto commandBuffer = mCommandBuffers[imageIndex].get();
+
     // Don't execute until this is ready
     vk::Semaphore waitSemaphores[] = {mImageAvailableSemaphores[frameIndex].get()};
     // place the wait before writing to the colour attachment
@@ -257,14 +275,21 @@ void VulkanApp::cleanup() {
 
   mDeviceInstance->waitAllDevicesIdle();
 
-  for(auto& p : mFrameInFlightFences) p.reset();
-  for(auto& p : mRenderFinishedSemaphores) p.reset();
-  for(auto& p : mImageAvailableSemaphores) p.reset();
-  for(auto& p : mCommandBuffers) p.reset();
+  //for(auto& p : mFrameInFlightFences) p.reset();
+  //for(auto& p : mRenderFinishedSemaphores) p.reset();
+  //for(auto& p : mImageAvailableSemaphores) p.reset();
+  //for(auto& p : mCommandBuffers) p.reset();
+  mFrameInFlightFences.clear();
+  mRenderFinishedSemaphores.clear();
+  mImageAvailableSemaphores.clear();
+  mCommandBuffers.clear();
   mCommandPool.reset();
   mGraphicsPipeline.reset();
   mFrameBuffer.reset();
   mWindowIntegration.reset();
+
+  mVertexBuffers.clear();
+
   mDeviceInstance.reset();
 
   glfwDestroyWindow(mWindow);

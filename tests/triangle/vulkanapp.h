@@ -46,6 +46,11 @@ public:
     float vertColour[4] = {0.f,0.f,0.f,0.f};
   };
 
+  // sizeof must be multiple of 4 here, no checking performed later
+  struct PushConstant_test {
+    float scale = 1.f;
+  };
+
 private:
   void initWindow();
   void initVK();
@@ -74,6 +79,8 @@ private:
   std::vector<vk::UniqueSemaphore> mImageAvailableSemaphores;
   std::vector<vk::UniqueSemaphore> mRenderFinishedSemaphores;
   std::vector<vk::UniqueFence> mFrameInFlightFences;
+
+  vk::PushConstantRange mPushConstant_test_range;
 };
 
 #endif // VULKANAPP_H

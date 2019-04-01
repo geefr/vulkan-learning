@@ -187,12 +187,13 @@ void GraphicsPipeline::createGraphicsPipeline() {
   // Pipeline layout is where uniforms and such go
   // and they have to be known when the pipeline is built
   // So no randomly chucking uniforms around like we do in gl right?
+  auto numPushConstantRanges = static_cast<uint32_t>(mPushConstants.size());
   auto layoutInfo = vk::PipelineLayoutCreateInfo()
       .setFlags({})
       .setSetLayoutCount(0)
       .setPSetLayouts(nullptr)
-      .setPushConstantRangeCount(0)
-      .setPPushConstantRanges(nullptr)
+      .setPushConstantRangeCount(numPushConstantRanges)
+      .setPPushConstantRanges(numPushConstantRanges ? mPushConstants.data() : nullptr)
       ;
 
   mPipelineLayout = mDeviceInstance.device().createPipelineLayoutUnique(layoutInfo);
