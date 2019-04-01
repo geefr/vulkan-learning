@@ -55,6 +55,7 @@ private:
   void initWindow();
   void initVK();
   void createVertexBuffers();
+  void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer);
   void loop();
   void cleanup();
 
@@ -62,6 +63,11 @@ private:
   GLFWwindow* mWindow = nullptr;
   int mWindowWidth = 800;
   int mWindowHeight = 600;
+
+  PushConstant_test mPushConstants;
+  float mPushConstantsScaleFactorDelta = 0.025f;
+  std::string mGeomName = "triangle";
+  int scaleCount = 0;
 
   std::map<std::string, std::unique_ptr<SimpleBuffer>> mVertexBuffers;
 

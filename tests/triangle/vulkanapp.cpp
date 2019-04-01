@@ -79,8 +79,9 @@ void VulkanApp::initVK() {
   }
 
   // TODO: Misfit
-  mCommandPool = mDeviceInstance->createCommandPool( { /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
-                                                                                                      vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
+  mCommandPool = mDeviceInstance->createCommandPool( { vk::CommandPoolCreateFlagBits::eResetCommandBuffer
+                                                       /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
+                                                          vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
                                                                                                                                               */
                                                      });
 
@@ -95,59 +96,62 @@ void VulkanApp::initVK() {
 
   for( auto i = 0u; i < mCommandBuffers.size(); ++i ) {
     auto commandBuffer = mCommandBuffers[i].get();
-    auto beginInfo = vk::CommandBufferBeginInfo()
-        .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution - TODO: Wat?
-        .setPInheritanceInfo(nullptr)
-        ;
-    commandBuffer.begin(beginInfo);
-
-    // Start the render pass
-    // Info for attachment load op clear
-    std::array<float,4> col = {0.f,.0f,0.f,1.f};
-    vk::ClearValue clearColour(col);
-
-    auto renderPassInfo = vk::RenderPassBeginInfo()
-        .setRenderPass(mGraphicsPipeline->renderPass())
-        .setFramebuffer(mFrameBuffer->frameBuffers()[i].get())
-        .setClearValueCount(1)
-        .setPClearValues(&clearColour);
-    renderPassInfo.renderArea.offset = vk::Offset2D(0,0);
-    renderPassInfo.renderArea.extent = mWindowIntegration->extent();
-
-    // render commands will be embedded in primary buffer and no secondary command buffers
-    // will be executed
-    commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-
-    // Now it's time to finally draw our one crappy little triangle >.<
-    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->pipeline());
-
-    // Set our push constants
-    PushConstant_test pushConstants = {1.5};
-    commandBuffer.pushConstants(
-          mGraphicsPipeline->pipelineLayout(),
-          mPushConstant_test_range.stageFlags,
-          mPushConstant_test_range.offset,
-          sizeof(PushConstant_test),
-          &pushConstants);
-
-
-    auto& vertBuf = mVertexBuffers["triangle"];
-    //auto& vertBuf = mVertexBuffers["rectangle"];
-    vk::Buffer buffers[] = { vertBuf->buffer() };
-    vk::DeviceSize offsets[] = { 0 };
-    commandBuffer.bindVertexBuffers(0, 1, buffers, offsets);
-    commandBuffer.draw(static_cast<uint32_t>(vertBuf->size() / sizeof(VertexData)), // Draw n vertices
-                       1, // Used for instanced rendering, 1 otherwise
-                       0, // First vertex
-                       0  // First instance
-                       );
-
-    // End the render pass
-    commandBuffer.endRenderPass();
-
-    // End the command buffer
-    commandBuffer.end();
+    buildCommandBuffer(commandBuffer, mFrameBuffer->frameBuffers()[i].get());
   }
+}
+
+void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer) {
+
+  auto beginInfo = vk::CommandBufferBeginInfo()
+      .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution - TODO: Wat?
+      .setPInheritanceInfo(nullptr)
+      ;
+  commandBuffer.begin(beginInfo);
+
+  // Start the render pass
+  // Info for attachment load op clear
+  std::array<float,4> col = {0.f,.0f,0.f,1.f};
+  vk::ClearValue clearColour(col);
+
+  auto renderPassInfo = vk::RenderPassBeginInfo()
+      .setRenderPass(mGraphicsPipeline->renderPass())
+      .setFramebuffer(frameBuffer)
+      .setClearValueCount(1)
+      .setPClearValues(&clearColour);
+  renderPassInfo.renderArea.offset = vk::Offset2D(0,0);
+  renderPassInfo.renderArea.extent = mWindowIntegration->extent();
+
+  // render commands will be embedded in primary buffer and no secondary command buffers
+  // will be executed
+  commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+
+  // Now it's time to finally draw our one crappy little triangle >.<
+  commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->pipeline());
+
+  // Set our push constants
+  commandBuffer.pushConstants(
+        mGraphicsPipeline->pipelineLayout(),
+        mPushConstant_test_range.stageFlags,
+        mPushConstant_test_range.offset,
+        sizeof(PushConstant_test),
+        &mPushConstants);
+
+  auto& vertBuf = mVertexBuffers[mGeomName];
+  //auto& vertBuf = mVertexBuffers["rectangle"];
+  vk::Buffer buffers[] = { vertBuf->buffer() };
+  vk::DeviceSize offsets[] = { 0 };
+  commandBuffer.bindVertexBuffers(0, 1, buffers, offsets);
+  commandBuffer.draw(static_cast<uint32_t>(vertBuf->size() / sizeof(VertexData)), // Draw n vertices
+                     1, // Used for instanced rendering, 1 otherwise
+                     0, // First vertex
+                     0  // First instance
+                     );
+
+  // End the render pass
+  commandBuffer.endRenderPass();
+
+  // End the command buffer
+  commandBuffer.end();
 }
 
 void VulkanApp::createVertexBuffers() {
@@ -195,12 +199,24 @@ void VulkanApp::createVertexBuffers() {
 void VulkanApp::loop() {
   auto frameIndex = 0u;
 
+  std::once_flag windowShown;
+  std::call_once(windowShown, [&win=mWindow](){glfwShowWindow(win);});
 
   while(!glfwWindowShouldClose(mWindow)) {
-    std::once_flag windowShown;
-    std::call_once(windowShown, [&win=mWindow](){glfwShowWindow(win);});
 
     glfwPollEvents();
+
+    mPushConstants.scale += mPushConstantsScaleFactorDelta;
+    if( mPushConstants.scale > 2.0f ) mPushConstantsScaleFactorDelta = -.025f;
+    if( mPushConstants.scale < 0.25f ) {
+      mPushConstantsScaleFactorDelta = .025f;
+      scaleCount++;
+    }
+    if( scaleCount == 1 ) {
+      scaleCount = 0;
+      if( mGeomName == "triangle" ) mGeomName = "rectangle";
+      else if( mGeomName == "rectangle" ) mGeomName = "triangle";
+    }
 
     // Wait for the last frame to finish rendering
     mDeviceInstance->device().waitForFences(1, &mFrameInFlightFences[frameIndex].get(), true, std::numeric_limits<uint64_t>::max());
@@ -223,6 +239,13 @@ void VulkanApp::loop() {
     // Submit the command buffer
     vk::SubmitInfo submitInfo = {};
     auto commandBuffer = mCommandBuffers[imageIndex].get();
+    auto frameBuffer = mFrameBuffer->frameBuffers()[imageIndex].get();
+
+    // Rebuild the command buffer every frame
+    // This isn't the most efficient but we're at least re-using the command buffer
+    // In a most complex application we would have multiple command buffers and only rebuild
+    // the section that needs changing..I think
+    buildCommandBuffer(commandBuffer, frameBuffer);
 
     // Don't execute until this is ready
     vk::Semaphore waitSemaphores[] = {mImageAvailableSemaphores[frameIndex].get()};
@@ -275,10 +298,6 @@ void VulkanApp::cleanup() {
 
   mDeviceInstance->waitAllDevicesIdle();
 
-  //for(auto& p : mFrameInFlightFences) p.reset();
-  //for(auto& p : mRenderFinishedSemaphores) p.reset();
-  //for(auto& p : mImageAvailableSemaphores) p.reset();
-  //for(auto& p : mCommandBuffers) p.reset();
   mFrameInFlightFences.clear();
   mRenderFinishedSemaphores.clear();
   mImageAvailableSemaphores.clear();

@@ -8,7 +8,11 @@ layout(location = 0) out vec4 fragColour;
 layout(push_constant) uniform push_test_t {
   float scale;
 } push_test;
-
+/*
+layout(set = 0, binding = 1) uniform uniform_test_t {
+  vec4 offset;
+} uniform_test;
+*/
 // Hardcoded coords in the vertex shader? Well it's simpler at least XD
 // So vulkan default is for +y to be down, so anything written assuming OpenGL will be upside down
 vec2 positions[3] = vec2[](
