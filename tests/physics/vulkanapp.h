@@ -34,7 +34,7 @@ class WindowIntegration;
 class VulkanApp
 {
 public:
-  VulkanApp() : mPhysics(10) {}
+  VulkanApp() : mPhysics(10000) {}
   ~VulkanApp(){}
 
   void run() {

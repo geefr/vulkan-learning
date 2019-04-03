@@ -55,6 +55,8 @@ public:
   /// Push Constants
   std::vector<vk::PushConstantRange>& pushConstants() { return mPushConstants; }
 
+  void inputAssembly_primitiveTopology(vk::PrimitiveTopology top) { mInputAssemblyPrimitiveTopology = top; }
+
 private:
   void createRenderPass();
   void createGraphicsPipeline();
@@ -71,6 +73,9 @@ private:
   vk::UniquePipelineLayout mPipelineLayout;
   vk::UniqueRenderPass mRenderPass;
   vk::UniquePipeline mPipeline;
+
+  // Input assembly settings
+  vk::PrimitiveTopology mInputAssemblyPrimitiveTopology = vk::PrimitiveTopology::eTriangleList;
 };
 
 #endif // GRAPHICSPIPELINE_H

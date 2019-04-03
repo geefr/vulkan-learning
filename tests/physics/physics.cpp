@@ -8,11 +8,11 @@ using glm::vec3;
 Physics::Physics(uint32_t numParticles) {
   std::random_device rd;
   std::mt19937 rdGen(rd());
-  std::uniform_real_distribution<> dis(-100.0, 100.0);
+  std::uniform_real_distribution<> dis(-10.0, 10.0);
   std::uniform_real_distribution<> disM(0.1, 10.0);
   for( auto i = 0u; i < numParticles; ++i ) {
     auto p = Particle();
-    p.position = {dis(rdGen), 0.0/*dis(rdGen)*/, dis(rdGen)};
+    p.position = {dis(rdGen), disM(rdGen), dis(rdGen)};
     p.mass = static_cast<float>(disM(rdGen));
     mParticles.emplace_back(p);
   }

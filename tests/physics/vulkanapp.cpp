@@ -40,6 +40,7 @@ void VulkanApp::initVK() {
     auto fragShader = mGraphicsPipeline->createShaderModule("frag.spv");
     mGraphicsPipeline->shaders().mVertexShader = vertShader.get();
     mGraphicsPipeline->shaders().mFragmentShader = fragShader.get();
+    mGraphicsPipeline->inputAssembly_primitiveTopology(vk::PrimitiveTopology::ePointList);
 
     // The layout of our vertex buffers
     auto vertBufferBinding = vk::VertexInputBindingDescription()
@@ -158,11 +159,12 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
 
 void VulkanApp::createVertexBuffers() {
   // Our particles
+  auto bufSize = sizeof(Physics::Particle) * mPhysics.particles().size();
   mParticleVertexBuffer.reset( new SimpleBuffer(
                                        *mDeviceInstance.get(),
-                                       sizeof(Physics::Particle),
+                                       bufSize,
                                        vk::BufferUsageFlagBits::eVertexBuffer) );
-  std::memcpy(mParticleVertexBuffer->map(), mPhysics.particles().data(), mPhysics.particles().size() * sizeof(Physics::Particle));
+  std::memcpy(mParticleVertexBuffer->map(), mPhysics.particles().data(), bufSize);
   mParticleVertexBuffer->unmap();
 }
 
@@ -177,6 +179,10 @@ void VulkanApp::loop() {
 
   auto maxIter = 100u;
   auto iter = 0u;
+
+
+  glm::vec3 eyePos = { 0,0,20 };
+
   while(!glfwWindowShouldClose(mWindow) ) {//&& iter++ < maxIter) {
 
     glfwPollEvents();
@@ -202,14 +208,15 @@ void VulkanApp::loop() {
     mCurTime = now();
 
     mPhysics.step(static_cast<float>(mCurTime - mLastTime));
-    mPhysics.logParticles();
+    //mPhysics.logParticles();
 
     // Setup matrices
-    mPushConstants.viewMatrix = glm::lookAt(
-                                  glm::vec3{0,110,0},
-                                  glm::vec3{0,0,0},
-                                  glm::vec3{0,1,0});
-    mPushConstants.projMatrix = glm::perspective(90,mWindowWidth / mWindowHeight, 100,-100);
+    // Remember now vulkan is z[0,1] +y=down, gl is z[-1,1] +y=up
+    // glm should work with the defines we've set
+    // So now we've got world space as right handed (y up) but everything after that is left handed (y down)
+    if( eyePos.y < 20 ) eyePos.y += 0.05;
+    mPushConstants.viewMatrix = glm::lookAt( eyePos, glm::vec3(0,0,0), glm::vec3(0,-1,0));
+    mPushConstants.projMatrix = glm::perspective(glm::radians(90.f),static_cast<float>(mWindowWidth / mWindowHeight), 0.001f,100.f);
 
     // Advance to next frame index, loop at max
     frameIndex++;

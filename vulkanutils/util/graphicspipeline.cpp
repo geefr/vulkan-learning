@@ -116,7 +116,7 @@ void GraphicsPipeline::createGraphicsPipeline() {
   // Typical triangles setup
   auto inputAssInfo = vk::PipelineInputAssemblyStateCreateInfo()
       .setFlags({})
-      .setTopology(vk::PrimitiveTopology::eTriangleList)
+      .setTopology(mInputAssemblyPrimitiveTopology)
       .setPrimitiveRestartEnable(false)
       ;
 
