@@ -17,7 +17,7 @@ public:
     glm::vec3 velocity = {0,0,0};
     float mass = 1; // Kg
     glm::vec3 force = {0,0,0};
-    glm::vec3 dimensions = {1,1,1};
+    glm::vec3 colour = {1,1,1};
   };
 
   Physics() = delete;
@@ -37,7 +37,10 @@ private:
 
   std::vector<Particle> mParticles;
 
-  glm::vec3 mGravity = {0,-0.01,0};
+  glm::vec3 mFixedGravity = {0,-0.5,0};
+
+  float mPointGravityMagnitude = 0.25;
+  glm::vec3 mPointGravityLocation = {0,-90,0};
 };
 
 #endif // PHYSICS_H

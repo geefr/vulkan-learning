@@ -52,7 +52,7 @@ void VulkanApp::initVK() {
     // Location, Binding, Format, Offset
     // TODO: If we're really only care about position/dimensions here uploading the whole buffer to the gpu is kinda wasteful
     mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Physics::Particle, position));
-    mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Physics::Particle, dimensions));
+    mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Physics::Particle, colour));
 
     // Register our push constant block
     mPushContantsRange = vk::PushConstantRange()
@@ -101,14 +101,14 @@ void VulkanApp::initVK() {
 
   for( auto i = 0u; i < mCommandBuffers.size(); ++i ) {
     auto commandBuffer = mCommandBuffers[i].get();
-    buildCommandBuffer(commandBuffer, mFrameBuffer->frameBuffers()[i].get());
+    buildCommandBuffer(commandBuffer, mFrameBuffer->frameBuffers()[i].get(), mParticleVertexBuffers[i]->buffer());
   }
 }
 
-void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer) {
+void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer, vk::Buffer& particleVertexBuffer) {
 
   auto beginInfo = vk::CommandBufferBeginInfo()
-      .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution - TODO: Wat?
+      .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution
       .setPInheritanceInfo(nullptr)
       ;
   commandBuffer.begin(beginInfo);
@@ -126,11 +126,62 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
   renderPassInfo.renderArea.offset = vk::Offset2D(0,0);
   renderPassInfo.renderArea.extent = mWindowIntegration->extent();
 
+  auto particleBufSize = static_cast<uint32_t>(mPhysics.particles().size() * sizeof(Physics::Particle));
+
+  // TODO: Remove the need to push the entire buffer here
+  // Mapping the buffer may be better, but we'd at least want a set of buffers to rotate through and would need to deal with synchronisation
+  // Better would be to push the whole physics simulation onto the gpu (the real intention of this sample) and then only need to
+  // push information about external forces and such in
+  //
+  // We're also limited to 65Kb here, which is an entirely sane and reasonable restriction to place on such a function
+  //
+  // This however does work, and is a super convenient way to get data in
+  // This would be the way to update uniform buffers and such if not using the push constant block
+
+  // As we're uploading a huge amount of data this isn't exactly sensible
+  // Upload in chunks to avoid the 65K limit for now, I'll improve this later as this is clearly the limiting factor for performance
+  auto chunkSize = 1000u;
+  for( auto i = 0u; i < mPhysics.particles().size(); i+=chunkSize ) {
+    auto numToUpload = chunkSize;
+    if( i + numToUpload >= mPhysics.particles().size() ) {
+      numToUpload = static_cast<uint32_t>(mPhysics.particles().size() - i);
+    }
+
+    commandBuffer.updateBuffer(particleVertexBuffer, i * sizeof(Physics::Particle), numToUpload * sizeof(Physics::Particle), mPhysics.particles().data() + i);
+  }
+
+  // While this is a nice way to update buffer contents we do need to synchronise, this is counted as a 'transfer operation' for synchronisation
+  // This may seem to work without the barrier here, as we've got 1 copy of the buffer per fif, and have already ensured the previous execution
+  // of this command buffer has finished with the fence
+  //
+  // But we do need to synchronise the write to the buffer against the read within the pipeline, it's possible the gpu won't have flushed the caches
+  // fully unless we tell it what this buffer needs to be ready for
+
+  // Barrier to prevent the start of vertex shader until writing has finished to vertex attributes
+  // Remember:
+  // - Access flags should be as minimal as possible here
+  // - Barriers must be outside a render pass (there's an exception to this, but keep it simple for now)
+  auto particleBufferBarrier = vk::BufferMemoryBarrier()
+      .setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
+      .setDstAccessMask(vk::AccessFlagBits::eVertexAttributeRead)
+      .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+      .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+      .setBuffer(particleVertexBuffer)
+      .setOffset(0)
+      .setSize(VK_WHOLE_SIZE)
+      ;
+  commandBuffer.pipelineBarrier(
+        vk::PipelineStageFlagBits::eTransfer,
+        vk::PipelineStageFlagBits::eVertexInput,
+        vk::DependencyFlagBits::eByRegion,
+        0, nullptr,
+        1, &particleBufferBarrier,
+        0, nullptr
+        );
+
   // render commands will be embedded in primary buffer and no secondary command buffers
   // will be executed
   commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-
-  // Now it's time to finally draw our one crappy little triangle >.<
   commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->pipeline());
 
   // Set our push constants
@@ -141,10 +192,11 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
         sizeof(PushConstants),
         &mPushConstants);
 
-  vk::Buffer buffers[] = { mParticleVertexBuffer->buffer() };
+  vk::Buffer buffers[] = { particleVertexBuffer };
   vk::DeviceSize offsets[] = { 0 };
   commandBuffer.bindVertexBuffers(0, 1, buffers, offsets);
-  commandBuffer.draw(static_cast<uint32_t>(mParticleVertexBuffer->size() / sizeof(Physics::Particle)), // Draw n vertices
+
+  commandBuffer.draw(mPhysics.particles().size(), // Draw n vertices
                      1, // Used for instanced rendering, 1 otherwise
                      0, // First vertex
                      0  // First instance
@@ -159,13 +211,22 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
 
 void VulkanApp::createVertexBuffers() {
   // Our particles
+  // TODO: This is device local to avoid allocating a large host-accessible buffer
+  // Apparently >500 particles makes the driver hang like it's constantly swapping data in/out
   auto bufSize = sizeof(Physics::Particle) * mPhysics.particles().size();
-  mParticleVertexBuffer.reset( new SimpleBuffer(
-                                       *mDeviceInstance.get(),
-                                       bufSize,
-                                       vk::BufferUsageFlagBits::eVertexBuffer) );
-  std::memcpy(mParticleVertexBuffer->map(), mPhysics.particles().data(), bufSize);
-  mParticleVertexBuffer->unmap();
+  mParticleVertexBuffers.reserve(mWindowIntegration->swapChainImages().size());
+  for( auto i = 0u; i < mWindowIntegration->swapChainImages().size(); ++i ) {
+    mParticleVertexBuffers.emplace_back( new SimpleBuffer(
+                                         *mDeviceInstance.get(),
+                                         bufSize,
+                                         vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                                         vk::MemoryPropertyFlagBits::eDeviceLocal) );
+  }
+
+
+  // Obviously we can't memmap device local memory
+  //std::memcpy(mParticleVertexBuffer->map(), mPhysics.particles().data(), bufSize);
+  //mParticleVertexBuffer->unmap();
 }
 
 void VulkanApp::loop() {
@@ -181,7 +242,8 @@ void VulkanApp::loop() {
   auto iter = 0u;
 
 
-  glm::vec3 eyePos = { 0,0,20 };
+  glm::vec3 eyePos = { 0,90,90 };
+  float modelRot = 0.f;
 
   while(!glfwWindowShouldClose(mWindow) ) {//&& iter++ < maxIter) {
 
@@ -214,9 +276,12 @@ void VulkanApp::loop() {
     // Remember now vulkan is z[0,1] +y=down, gl is z[-1,1] +y=up
     // glm should work with the defines we've set
     // So now we've got world space as right handed (y up) but everything after that is left handed (y down)
-    if( eyePos.y < 20 ) eyePos.y += 0.05;
-    mPushConstants.viewMatrix = glm::lookAt( eyePos, glm::vec3(0,0,0), glm::vec3(0,-1,0));
-    mPushConstants.projMatrix = glm::perspective(glm::radians(90.f),static_cast<float>(mWindowWidth / mWindowHeight), 0.001f,100.f);
+    //if( eyePos.y < 20 ) eyePos.y += 0.05;
+
+    modelRot += .1f;
+    mPushConstants.modelMatrix = glm::mat4(1);//glm::rotate(glm::mat4(1), glm::radians(modelRot), glm::vec3(0.f,-1.f,0.f));
+    mPushConstants.viewMatrix = glm::lookAt( eyePos, glm::vec3(0,-100,0), glm::vec3(0,-1,0));
+    mPushConstants.projMatrix = glm::perspective(glm::radians(90.f),static_cast<float>(mWindowWidth / mWindowHeight), 0.001f,1000.f);
 
     // Advance to next frame index, loop at max
     frameIndex++;
@@ -242,7 +307,7 @@ void VulkanApp::loop() {
     // This isn't the most efficient but we're at least re-using the command buffer
     // In a most complex application we would have multiple command buffers and only rebuild
     // the section that needs changing..I think
-    buildCommandBuffer(commandBuffer, frameBuffer);
+    buildCommandBuffer(commandBuffer, frameBuffer, mParticleVertexBuffers[imageIndex]->buffer());
 
     // Don't execute until this is ready
     vk::Semaphore waitSemaphores[] = {mImageAvailableSemaphores[frameIndex].get()};
@@ -304,7 +369,7 @@ void VulkanApp::cleanup() {
   mFrameBuffer.reset();
   mWindowIntegration.reset();
 
-  mParticleVertexBuffer.reset();
+  mParticleVertexBuffers.clear();
 
   mDeviceInstance.reset();
 

@@ -18,8 +18,10 @@ SimpleBuffer::SimpleBuffer(
 }
 
 SimpleBuffer::~SimpleBuffer() {
-  flush();
-  unmap();
+  if( mMapped) {
+    flush();
+    unmap();
+  }
 }
 
 void* SimpleBuffer::map() {

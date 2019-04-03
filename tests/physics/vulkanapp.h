@@ -34,7 +34,8 @@ class WindowIntegration;
 class VulkanApp
 {
 public:
-  VulkanApp() : mPhysics(10000) {}
+  // TODO: Must be a multiple of 4, we don't validate buffer size before throwing at vulkan
+  VulkanApp() : mPhysics(1000000) {}
   ~VulkanApp(){}
 
   void run() {
@@ -46,6 +47,7 @@ public:
 
   // sizeof must be multiple of 4 here, no checking performed later
   struct PushConstants {
+    glm::mat4 modelMatrix;
     glm::mat4 viewMatrix;
     glm::mat4 projMatrix;
   };
@@ -54,7 +56,7 @@ private:
   void initWindow();
   void initVK();
   void createVertexBuffers();
-  void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer);
+  void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer, vk::Buffer& particleVertexBuffer);
   void loop();
   void cleanup();
   double now();
@@ -68,7 +70,7 @@ private:
   float mPushConstantsScaleFactorDelta = 0.025f;
   int scaleCount = 0;
 
-  std::unique_ptr<SimpleBuffer> mParticleVertexBuffer;
+  std::vector<std::unique_ptr<SimpleBuffer>> mParticleVertexBuffers;
 
   // Our classyboys to obfuscate the verbosity of vulkan somewhat
   // Remember deletion order matters
