@@ -17,6 +17,7 @@ public:
     glm::vec3 velocity = {0,0,0};
     float mass = 1; // Kg
     glm::vec3 force = {0,0,0};
+    glm::vec3 dimensions = {1,1,1};
   };
 
   Physics() = delete;
@@ -26,7 +27,7 @@ public:
 
   void step( float dT );
 
-
+  const std::vector<Particle>& particles() const { return mParticles; }
 
 private:
   void calcForce(Particle& p);

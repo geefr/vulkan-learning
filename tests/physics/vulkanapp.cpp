@@ -2,6 +2,8 @@
 #include <mutex>
 #include <chrono>
 
+#include "glm/gtc/matrix_transform.hpp"
+
 void VulkanApp::initWindow() {
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -42,20 +44,21 @@ void VulkanApp::initVK() {
     // The layout of our vertex buffers
     auto vertBufferBinding = vk::VertexInputBindingDescription()
         .setBinding(0)
-        .setStride(sizeof(VertexData))
+        .setStride(sizeof(Physics::Particle))
         .setInputRate(vk::VertexInputRate::eVertex);
     mGraphicsPipeline->vertexInputBindings().emplace_back(vertBufferBinding);
 
     // Location, Binding, Format, Offset
-    mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(VertexData, vertCoord));
-    mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(VertexData, vertColour));
+    // TODO: If we're really only care about position/dimensions here uploading the whole buffer to the gpu is kinda wasteful
+    mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Physics::Particle, position));
+    mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Physics::Particle, dimensions));
 
     // Register our push constant block
-    mPushConstant_test_range = vk::PushConstantRange()
+    mPushContantsRange = vk::PushConstantRange()
         .setStageFlags(vk::ShaderStageFlagBits::eVertex)
         .setOffset(0)
-        .setSize(sizeof(PushConstant_test));
-    mGraphicsPipeline->pushConstants().emplace_back(mPushConstant_test_range);
+        .setSize(sizeof(PushConstants));
+    mGraphicsPipeline->pushConstants().emplace_back(mPushContantsRange);
 
     // Create and upload vertex buffers
     createVertexBuffers();
@@ -132,17 +135,15 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
   // Set our push constants
   commandBuffer.pushConstants(
         mGraphicsPipeline->pipelineLayout(),
-        mPushConstant_test_range.stageFlags,
-        mPushConstant_test_range.offset,
-        sizeof(PushConstant_test),
+        mPushContantsRange.stageFlags,
+        mPushContantsRange.offset,
+        sizeof(PushConstants),
         &mPushConstants);
 
-  auto& vertBuf = mVertexBuffers[mGeomName];
-  //auto& vertBuf = mVertexBuffers["rectangle"];
-  vk::Buffer buffers[] = { vertBuf->buffer() };
+  vk::Buffer buffers[] = { mParticleVertexBuffer->buffer() };
   vk::DeviceSize offsets[] = { 0 };
   commandBuffer.bindVertexBuffers(0, 1, buffers, offsets);
-  commandBuffer.draw(static_cast<uint32_t>(vertBuf->size() / sizeof(VertexData)), // Draw n vertices
+  commandBuffer.draw(static_cast<uint32_t>(mParticleVertexBuffer->size() / sizeof(Physics::Particle)), // Draw n vertices
                      1, // Used for instanced rendering, 1 otherwise
                      0, // First vertex
                      0  // First instance
@@ -156,45 +157,13 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
 }
 
 void VulkanApp::createVertexBuffers() {
-  // A pretty triangle
-  {
-    VertexData vertData[] = {
-      {{0,-.5,0},{1,0,0,1}},
-      {{-.5,.5,0},{0,1,0,1}},
-      {{.5,.5,0},{0,0,1,1}},
-    };
-    mVertexBuffers["triangle"].reset( new SimpleBuffer(
-                                        *mDeviceInstance.get(),
-                                        sizeof(vertData),
-                                        vk::BufferUsageFlagBits::eVertexBuffer) );
-    auto& vertBuffer = mVertexBuffers["triangle"];
-
-    std::memcpy(vertBuffer->map(), vertData, sizeof(vertData));
-    vertBuffer->flush();
-    vertBuffer->unmap();
-  }
-
-  // A pretty quad
-  {
-    VertexData vertData[] = {
-      {{-.5,-.5,0},{1,0,0,1}},
-      {{-.5,.5,0},{0,1,0,1}},
-      {{ .5,-.5,0},{0,0,1,1}},
-
-      {{ .5,-.5,0},{0,0,1,1}},
-      {{-.5,.5,0},{0,1,0,1}},
-      {{.5,.5,0},{1,0,1,.5}},
-    };
-    mVertexBuffers["rectangle"].reset( new SimpleBuffer(
-                                        *mDeviceInstance.get(),
-                                        sizeof(vertData),
-                                        vk::BufferUsageFlagBits::eVertexBuffer) );
-    auto& vertBuffer = mVertexBuffers["rectangle"];
-
-    std::memcpy(vertBuffer->map(), vertData, sizeof(vertData));
-    vertBuffer->flush();
-    vertBuffer->unmap();
-  }
+  // Our particles
+  mParticleVertexBuffer.reset( new SimpleBuffer(
+                                       *mDeviceInstance.get(),
+                                       sizeof(Physics::Particle),
+                                       vk::BufferUsageFlagBits::eVertexBuffer) );
+  std::memcpy(mParticleVertexBuffer->map(), mPhysics.particles().data(), mPhysics.particles().size() * sizeof(Physics::Particle));
+  mParticleVertexBuffer->unmap();
 }
 
 void VulkanApp::loop() {
@@ -211,7 +180,7 @@ void VulkanApp::loop() {
   while(!glfwWindowShouldClose(mWindow) ) {//&& iter++ < maxIter) {
 
     glfwPollEvents();
-
+/*
     mPushConstants.scale += mPushConstantsScaleFactorDelta;
     if( mPushConstants.scale > 2.0f ) mPushConstantsScaleFactorDelta = -.025f;
     if( mPushConstants.scale < 0.25f ) {
@@ -222,7 +191,7 @@ void VulkanApp::loop() {
       scaleCount = 0;
       if( mGeomName == "triangle" ) mGeomName = "rectangle";
       else if( mGeomName == "rectangle" ) mGeomName = "triangle";
-    }
+    }*/
 
     // Wait for the last frame to finish rendering
     mDeviceInstance->device().waitForFences(1, &mFrameInFlightFences[frameIndex].get(), true, std::numeric_limits<uint64_t>::max());
@@ -234,6 +203,13 @@ void VulkanApp::loop() {
 
     mPhysics.step(static_cast<float>(mCurTime - mLastTime));
     mPhysics.logParticles();
+
+    // Setup matrices
+    mPushConstants.viewMatrix = glm::lookAt(
+                                  glm::vec3{0,110,0},
+                                  glm::vec3{0,0,0},
+                                  glm::vec3{0,1,0});
+    mPushConstants.projMatrix = glm::perspective(90,mWindowWidth / mWindowHeight, 100,-100);
 
     // Advance to next frame index, loop at max
     frameIndex++;
@@ -321,7 +297,7 @@ void VulkanApp::cleanup() {
   mFrameBuffer.reset();
   mWindowIntegration.reset();
 
-  mVertexBuffers.clear();
+  mParticleVertexBuffer.reset();
 
   mDeviceInstance.reset();
 

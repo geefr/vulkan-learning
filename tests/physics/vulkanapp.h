@@ -15,7 +15,9 @@
 #endif
 
 // https://github.com/KhronosGroup/Vulkan-Hpp
-# include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan.hpp>
+
+#include "glm/glm.hpp"
 
 #include <iostream>
 #include <stdexcept>
@@ -42,15 +44,10 @@ public:
     cleanup();
   }
 
-  struct VertexData
-  {
-    float vertCoord[3] = {0.f,0.f,0.f};
-    float vertColour[4] = {0.f,0.f,0.f,0.f};
-  };
-
   // sizeof must be multiple of 4 here, no checking performed later
-  struct PushConstant_test {
-    float scale = 1.f;
+  struct PushConstants {
+    glm::mat4 viewMatrix;
+    glm::mat4 projMatrix;
   };
 
 private:
@@ -67,12 +64,11 @@ private:
   int mWindowWidth = 800;
   int mWindowHeight = 600;
 
-  PushConstant_test mPushConstants;
+  PushConstants mPushConstants;
   float mPushConstantsScaleFactorDelta = 0.025f;
-  std::string mGeomName = "triangle";
   int scaleCount = 0;
 
-  std::map<std::string, std::unique_ptr<SimpleBuffer>> mVertexBuffers;
+  std::unique_ptr<SimpleBuffer> mParticleVertexBuffer;
 
   // Our classyboys to obfuscate the verbosity of vulkan somewhat
   // Remember deletion order matters
@@ -89,7 +85,7 @@ private:
   std::vector<vk::UniqueSemaphore> mRenderFinishedSemaphores;
   std::vector<vk::UniqueFence> mFrameInFlightFences;
 
-  vk::PushConstantRange mPushConstant_test_range;
+  vk::PushConstantRange mPushContantsRange;
 
   Physics mPhysics;
   double mLastTime = 0.;
