@@ -6,6 +6,7 @@
 #include "util/framebuffer.h"
 #include "util/simplebuffer.h"
 #include "util/graphicspipeline.h"
+#include "util/computepipeline.h"
 
 #include "physics.h"
 
@@ -35,7 +36,7 @@ class VulkanApp
 {
 public:
   // TODO: Must be a multiple of 4, we don't validate buffer size before throwing at vulkan
-  VulkanApp() : mPhysics(1000000) {}
+  VulkanApp() : mPhysics(10000) {}
   ~VulkanApp(){}
 
   void run() {
@@ -56,7 +57,10 @@ private:
   void initWindow();
   void initVK();
   void createVertexBuffers();
+  void createComputeBuffers();
+  void createComputeDescriptorSet();
   void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer, vk::Buffer& particleVertexBuffer);
+  void buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer);
   void loop();
   void cleanup();
   double now();
@@ -72,12 +76,31 @@ private:
 
   std::vector<std::unique_ptr<SimpleBuffer>> mParticleVertexBuffers;
 
+
+  // TODO: Hardcoded buffer sizes
+  uint32_t mComputeBufferWidth = 1000;
+  uint32_t mComputeBufferHeight = 1;
+  uint32_t mComputeBufferDepth = 1;
+  uint32_t mComputeGroupSizeX = 1;
+  uint32_t mComputeGroupSizeY = 1;
+  uint32_t mComputeGroupSizeZ = 1;
+  struct computeThing {
+    float stuff;
+  };
+  std::vector<std::unique_ptr<SimpleBuffer>> mComputeDataBuffers;
+  vk::UniqueDescriptorPool mComputeDescriptorPool;
+  vk::DescriptorSet mComputeDescriptorSet; // Owned by pool
+  vk::UniqueCommandPool mComputeCommandPool;
+  std::vector<vk::UniqueCommandBuffer> mComputeCommandBuffers;
+
   // Our classyboys to obfuscate the verbosity of vulkan somewhat
   // Remember deletion order matters
   std::unique_ptr<DeviceInstance> mDeviceInstance;
   std::unique_ptr<WindowIntegration> mWindowIntegration;
   std::unique_ptr<FrameBuffer> mFrameBuffer;
   std::unique_ptr<GraphicsPipeline> mGraphicsPipeline;
+
+  std::unique_ptr<ComputePipeline> mComputePipeline;
 
   DeviceInstance::QueueRef* mGraphicsQueue = nullptr;
   DeviceInstance::QueueRef* mComputeQueue = nullptr;

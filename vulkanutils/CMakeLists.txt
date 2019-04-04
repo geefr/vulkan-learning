@@ -13,6 +13,8 @@ add_library( vulkanutils ${VULKANUTILS_LIB_TYPE}
   util/deviceinstance.cpp
   util/graphicspipeline.h
   util/graphicspipeline.cpp
+  util/computepipeline.h
+  util/computepipeline.cpp
 	)
 target_link_libraries( ${targetName} Vulkan::Vulkan glfw )
 

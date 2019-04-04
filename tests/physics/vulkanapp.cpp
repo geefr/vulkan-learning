@@ -39,6 +39,7 @@ void VulkanApp::initVK() {
   mWindowIntegration.reset(new WindowIntegration(*mDeviceInstance.get(), *mGraphicsQueue, mWindow));
 
   mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get()));
+  mComputePipeline.reset(new ComputePipeline(*mDeviceInstance.get()));
 
   // Build the graphics pipeline
   // In this case we can throw away the shader modules after building as they're only used by the one pipeline
@@ -67,11 +68,18 @@ void VulkanApp::initVK() {
         .setOffset(0)
         .setSize(sizeof(PushConstants));
     mGraphicsPipeline->pushConstants().emplace_back(mPushContantsRange);
-
-    // Create and upload vertex buffers
-    createVertexBuffers();
-
     mGraphicsPipeline->build();
+  }
+
+  // Build the compute pipeline
+  {
+    auto compShader = mComputePipeline->createShaderModule("comp.spv");
+    mComputePipeline->shader() = compShader.get();
+    // Input and output buffers to compute shader
+    mComputePipeline->addDescriptorSetLayoutBinding(0, 0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute);
+    mComputePipeline->addDescriptorSetLayoutBinding(0, 1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute);
+
+    mComputePipeline->build();
   }
 
   mFrameBuffer.reset(new FrameBuffer(mDeviceInstance->device(), *mWindowIntegration.get(), mGraphicsPipeline->renderPass()));
@@ -82,7 +90,7 @@ void VulkanApp::initVK() {
   // frameInFlightFence - cpu: Used to ensure we don't schedule a second frame for each image until the last is complete
 
   // Create the semaphores we're gonna use
-  mMaxFramesInFlight = mWindowIntegration->swapChainImages().size();
+  mMaxFramesInFlight = static_cast<uint32_t>(mWindowIntegration->swapChainImages().size());
   for( auto i = 0u; i < mMaxFramesInFlight; ++i ) {
     mImageAvailableSemaphores.emplace_back( mDeviceInstance->device().createSemaphoreUnique({}));
     mRenderFinishedSemaphores.emplace_back( mDeviceInstance->device().createSemaphoreUnique({}));
@@ -90,25 +98,54 @@ void VulkanApp::initVK() {
     mFrameInFlightFences.emplace_back( mDeviceInstance->device().createFenceUnique({vk::FenceCreateFlagBits::eSignaled}));
   }
 
-  // TODO: Misfit
-  mCommandPool = mDeviceInstance->createCommandPool( { vk::CommandPoolCreateFlagBits::eResetCommandBuffer
-                                                       /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
-                                                          vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
-                                                                                                                                              */
-                                                     }, *mGraphicsQueue);
+  // Create buffers
+  createVertexBuffers();
+  createComputeBuffers();
+  createComputeDescriptorSet();
 
-  // Now make a command buffer for each framebuffer
-  auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo()
-      .setCommandPool(mCommandPool.get())
-      .setCommandBufferCount(static_cast<uint32_t>(mWindowIntegration->swapChainImages().size()))
-      .setLevel(vk::CommandBufferLevel::ePrimary)
-      ;
+  // TODO: Could be utilitised
+  // Command pool/buffers for rendering
+  {
+    mCommandPool = mDeviceInstance->createCommandPool( { vk::CommandPoolCreateFlagBits::eResetCommandBuffer
+                                                         /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
+                                                            vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
+                                                                                                                                                */
+                                                       }, *mGraphicsQueue);
 
-  mCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
+    // Now make a command buffer for each framebuffer
+    auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo()
+        .setCommandPool(mCommandPool.get())
+        .setCommandBufferCount(static_cast<uint32_t>(mWindowIntegration->swapChainImages().size()))
+        .setLevel(vk::CommandBufferLevel::ePrimary)
+        ;
 
-  for( auto i = 0u; i < mCommandBuffers.size(); ++i ) {
-    auto commandBuffer = mCommandBuffers[i].get();
-    buildCommandBuffer(commandBuffer, mFrameBuffer->frameBuffers()[i].get(), mParticleVertexBuffers[i]->buffer());
+    mCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
+
+    for( auto i = 0u; i < mCommandBuffers.size(); ++i ) {
+      auto commandBuffer = mCommandBuffers[i].get();
+      buildCommandBuffer(commandBuffer, mFrameBuffer->frameBuffers()[i].get(), mParticleVertexBuffers[i]->buffer());
+    }
+  }
+
+  // Command pool/buffers for compute
+  // TODO: If both queue pointers are the same should maybe use a single pool?
+  {
+    mComputeCommandPool = mDeviceInstance->createCommandPool( { vk::CommandPoolCreateFlagBits::eResetCommandBuffer
+                                                         /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
+                                                            vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
+                                                                                                                                                */
+                                                       }, *mComputeQueue);
+
+    // Now make a command buffer for each framebuffer
+    auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo()
+        .setCommandPool(mComputeCommandPool.get())
+        .setCommandBufferCount(static_cast<uint32_t>(1))
+        .setLevel(vk::CommandBufferLevel::ePrimary);
+    mComputeCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
+    for( auto i = 0u; i < mComputeCommandBuffers.size(); ++i ) {
+      auto commandBuffer = mComputeCommandBuffers[i].get();
+      buildComputeCommandBuffer(commandBuffer);
+    }
   }
 }
 
@@ -216,6 +253,31 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
   commandBuffer.end();
 }
 
+void VulkanApp::buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer) {
+  auto beginInfo = vk::CommandBufferBeginInfo()
+      .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution
+      .setPInheritanceInfo(nullptr);
+  commandBuffer.begin(beginInfo);
+
+  // Bind the compute pipeline
+  commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, mComputePipeline->pipeline());
+
+  // Bind the descriptor sets - Bind the descriptor set (which points to the buffers) to the pipeline
+  commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute,
+                                   mComputePipeline->pipelineLayout(),
+                                   0, 1,
+                                   &mComputeDescriptorSet,
+                                   0, nullptr);
+
+  // Dispatch the pipeline - equivalent of a 'draw'
+  // Number of groups is specified here, size of a group is set in the shader
+  // TODO: Set group sizes in shaders as specialisation constants so the number synchronise nicely
+  commandBuffer.dispatch(mComputeBufferWidth / mComputeGroupSizeX, mComputeBufferHeight / mComputeGroupSizeY, mComputeBufferDepth / mComputeGroupSizeZ );
+
+  // End the command buffer
+  commandBuffer.end();
+}
+
 void VulkanApp::createVertexBuffers() {
   // Our particles
   // TODO: This is device local to avoid allocating a large host-accessible buffer
@@ -229,11 +291,64 @@ void VulkanApp::createVertexBuffers() {
                                          vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
                                          vk::MemoryPropertyFlagBits::eDeviceLocal) );
   }
+}
 
+void VulkanApp::createComputeBuffers() {
+  // 0 - input buffer
+  // 1 - output buffer
+  auto bufSize = sizeof(computeThing) * mComputeBufferWidth * mComputeBufferHeight * mComputeBufferDepth;
+  for( auto i = 0u; i < 2; ++i ) {
+    mComputeDataBuffers.emplace_back( new SimpleBuffer(
+                                         *mDeviceInstance.get(),
+                                         bufSize,
+                                         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                                         vk::MemoryPropertyFlagBits::eDeviceLocal) );
+  }
+}
 
-  // Obviously we can't memmap device local memory
-  //std::memcpy(mParticleVertexBuffer->map(), mPhysics.particles().data(), bufSize);
-  //mParticleVertexBuffer->unmap();
+void VulkanApp::createComputeDescriptorSet() {
+  // Create a descriptor pool, to allocate descriptor sets from
+  auto poolSize = vk::DescriptorPoolSize()
+      .setType(vk::DescriptorType::eStorageBuffer)
+      .setDescriptorCount(2);
+  auto poolInfo = vk::DescriptorPoolCreateInfo()
+      .setFlags({})
+      .setMaxSets(1)
+      .setPoolSizeCount(1)
+      .setPPoolSizes(&poolSize);
+  mComputeDescriptorPool = mDeviceInstance->device().createDescriptorPoolUnique(poolInfo);
+
+  // Create the descriptor set
+  const vk::DescriptorSetLayout dsLayouts[] = {mComputePipeline->descriptorSetLayouts()[0].get()};
+  auto dsInfo = vk::DescriptorSetAllocateInfo()
+      .setDescriptorPool(mComputeDescriptorPool.get())
+      .setDescriptorSetCount(1)
+      .setPSetLayouts(dsLayouts);
+  auto sets = mDeviceInstance->device().allocateDescriptorSets(dsInfo);
+  mComputeDescriptorSet = std::move(sets.front()); sets.clear();
+
+  // Update the descriptor set to map to the buffers
+  std::vector<vk::DescriptorBufferInfo> uInfos;
+  for( auto i = 0u; i < mComputeDataBuffers.size(); ++i ) {
+    auto& buf = mComputeDataBuffers[i];
+    auto uInfo = vk::DescriptorBufferInfo()
+        .setBuffer(buf->buffer())
+        .setOffset(0)
+        .setRange(VK_WHOLE_SIZE);
+    uInfos.emplace_back(uInfo);
+  }
+
+  auto wInfo = vk::WriteDescriptorSet()
+      .setDstSet(mComputeDescriptorSet)
+      .setDstBinding(0)
+      .setDstArrayElement(0)
+      .setDescriptorCount(2)
+      .setDescriptorType(vk::DescriptorType::eStorageBuffer)
+      .setPImageInfo(nullptr)
+      .setPBufferInfo(uInfos.data())
+      .setPTexelBufferView(nullptr);
+
+  mDeviceInstance->device().updateDescriptorSets(1, &wInfo, 0, nullptr);
 }
 
 void VulkanApp::loop() {
@@ -372,11 +487,17 @@ void VulkanApp::cleanup() {
   mImageAvailableSemaphores.clear();
   mCommandBuffers.clear();
   mCommandPool.reset();
+  mComputeCommandBuffers.clear();
+  mComputeCommandPool.reset();
   mGraphicsPipeline.reset();
+  mComputePipeline.reset();
   mFrameBuffer.reset();
   mWindowIntegration.reset();
 
+  mComputeDescriptorPool.reset();
+
   mParticleVertexBuffers.clear();
+  mComputeDataBuffers.clear();
 
   mDeviceInstance.reset();
 

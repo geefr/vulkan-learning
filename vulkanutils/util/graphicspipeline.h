@@ -55,6 +55,7 @@ public:
   /// Push Constants
   std::vector<vk::PushConstantRange>& pushConstants() { return mPushConstants; }
 
+
   void inputAssembly_primitiveTopology(vk::PrimitiveTopology top) { mInputAssemblyPrimitiveTopology = top; }
 
 private:

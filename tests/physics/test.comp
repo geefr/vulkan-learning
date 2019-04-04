@@ -1,0 +1,30 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+#define compDataWidth 1000
+#define compDataHeight 1
+
+// Work group size
+// For a simple example mainly arbitrary, but for more complex stuff would matter
+// Invocations within a work group can communicate via some variables/methods
+// so group size would be like the block size in an image compression algorithm or such
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(binding = 0) buffer inputBuffer {
+  float inputBuf[];
+};
+layout(binding = 1) buffer outputBuffer {
+  float outputBuf[];
+};
+
+void main(){
+  // Some unnecesary threads are launched in order to fit work into workgroups, terminate them
+  if( gl_GlobalInvocationID.x >= compDataWidth || gl_GlobalInvocationID.y >= compDataHeight)
+    return;
+
+  // Fetch the input data
+  uint bufOffset = (compDataWidth * gl_GlobalInvocationID.y) + gl_GlobalInvocationID.x;
+
+  // As an initial test just copy to the output buffer
+  outputBuf[bufOffset] = inputBuf[bufOffset];
+}

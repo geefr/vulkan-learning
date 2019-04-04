@@ -260,3 +260,4 @@ std::vector<vk::PipelineShaderStageCreateInfo> GraphicsPipeline::createShaderSta
   }
   return shaderStages;
 }
+

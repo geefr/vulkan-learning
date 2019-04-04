@@ -101,18 +101,26 @@ void DeviceInstance::createLogicalDevice(std::vector<vk::QueueFlags> qFlags) {
   for( auto& qF : qFlags ) {
     auto it = std::find_if(qFamProps.begin(), qFamProps.end(), [&](auto& p) {
       if( p.queueFlags & qF ) return true;
+      throw std::runtime_error("DeviceInstance::createLogicalDevice: Physical device doesn't support requested queue types");
       return false;
     });
-    if( it != qFamProps.end() ) {
-      auto qInfo = vk::DeviceQueueCreateInfo()
-          .setFlags({})
-          .setQueueFamilyIndex(static_cast<uint32_t>(it - qFamProps.begin()))
-          .setQueueCount(1)
-          .setPQueuePriorities(&queuePriorities);
-      queueInfo.emplace_back(qInfo);
-    }
+    if( it == qFamProps.end() ) continue;
+
+    auto qFamIdx = static_cast<uint32_t>(it - qFamProps.begin());
+
+    auto it2 = std::find_if(queueInfo.begin(), queueInfo.end(), [&](auto& p) {
+      return p.queueFamilyIndex == qFamIdx;
+    });
+    if( it2 != queueInfo.end() ) continue;
+
+    auto qInfo = vk::DeviceQueueCreateInfo()
+        .setFlags({})
+        .setQueueFamilyIndex(qFamIdx)
+        .setQueueCount(1)
+        .setPQueuePriorities(&queuePriorities);
+    queueInfo.emplace_back(qInfo);
   }
-  if( queueInfo.size() != qFlags.size() )  throw std::runtime_error("createLogicalDevice: Physical device doesn't support requested queue types");
+  //if( queueInfo.size() != qFlags.size() )  throw std::runtime_error("DeviceInstance::createLogicalDevice: Physical device doesn't support requested queue types");
 
   auto supportedExtensions = mPhysicalDevices.front().enumerateDeviceExtensionProperties();
   std::vector<const char*> enabledDeviceExtensions;
@@ -156,20 +164,21 @@ void DeviceInstance::createLogicalDevice(std::vector<vk::QueueFlags> qFlags) {
 
   mDevice = mPhysicalDevices.front().createDeviceUnique(info);
 
-  for( auto i=0u; i < qFlags.size(); ++i ) {
+  for( auto i=0u; i < queueInfo.size(); ++i ) {
     auto famIdx = queueInfo[i].queueFamilyIndex;
+    auto famProps = mPhysicalDevices.front().getQueueFamilyProperties();
 
     auto qRef = QueueRef();
     qRef.famIndex = famIdx;
     qRef.queue = mDevice->getQueue(famIdx, 0);
-    qRef.flags = qFlags[i];
+    qRef.flags = famProps[famIdx].queueFlags;
     mQueues.emplace_back( qRef );
   }
 }
 
 DeviceInstance::QueueRef* DeviceInstance::getQueue( vk::QueueFlags flags ) {
   auto it = std::find_if(mQueues.begin(), mQueues.end(), [&]( auto& q) {
-    return flags == q.flags;
+    return flags & q.flags;
   });
   if( it == mQueues.end() ) return nullptr;
   return &(*it);
