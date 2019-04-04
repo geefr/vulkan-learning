@@ -302,7 +302,7 @@ void VulkanApp::createComputeBuffers() {
                                          *mDeviceInstance.get(),
                                          bufSize,
                                          vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-                                         vk::MemoryPropertyFlagBits::eDeviceLocal) );
+                                         /*vk::MemoryPropertyFlagBits::eDeviceLocal*/ vk::MemoryPropertyFlagBits::eHostVisible) );
   }
 }
 
@@ -366,6 +366,43 @@ void VulkanApp::loop() {
 
   glm::vec3 eyePos = { 0,90,90 };
   float modelRot = 0.f;
+
+
+
+
+  // TODO: Hacky compute test thing :O
+  {
+    auto sourceData = reinterpret_cast<float*>(mComputeDataBuffers[0]->map());
+    auto f = 0.f;
+    for( auto z = 0u; z < mComputeBufferDepth; ++z )
+      for( auto y = 0u; y < mComputeBufferHeight; ++y )
+        for( auto x = 0u; x < mComputeBufferWidth; ++x ) {
+          sourceData[(z * mComputeBufferWidth * mComputeBufferHeight) + (y * mComputeBufferWidth) + x] = f;
+          f += .1f;
+        }
+    mComputeDataBuffers[0]->flush();
+    mComputeDataBuffers[0]->unmap();
+
+    auto subInfo = vk::SubmitInfo()
+        .setCommandBufferCount(1)
+        .setPCommandBuffers(&mComputeCommandBuffers[0].get());
+    auto fence = mDeviceInstance->device().createFenceUnique({});
+    mComputeQueue->queue.submit(1, &subInfo, fence.get());
+    mDeviceInstance->device().waitForFences(1, &fence.get(), true, std::numeric_limits<uint64_t>::max());
+
+    auto destData = reinterpret_cast<float*>(mComputeDataBuffers[1]->map());
+    mComputeDataBuffers[1]->flush();
+    for( auto z = 0u; z < mComputeBufferDepth; ++z )
+      for( auto y = 0u; y < mComputeBufferHeight; ++y )
+        for( auto x = 0u; x < mComputeBufferWidth; ++x ) {
+          std::cout << "Computed data [" << x << "," << y << "," << z << "] = " << destData[(z * mComputeBufferWidth * mComputeBufferHeight) + (y * mComputeBufferWidth) + x] << std::endl;
+        }
+
+    mComputeDataBuffers[0]->unmap();
+  }
+
+  return;
+
 
   while(!glfwWindowShouldClose(mWindow) ) {//&& iter++ < maxIter) {
 
