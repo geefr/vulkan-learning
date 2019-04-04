@@ -16,7 +16,11 @@ void VulkanApp::initVK() {
   const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
   std::vector<const char*> requiredExtensions;
   for(uint32_t i = 0; i < glfwExtensionCount; ++i ) requiredExtensions.push_back(glfwExtensions[i]);
-  mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "Vulkan Test Application", 1));
+  // Just the one queue here for drawing our triangle
+  std::vector<vk::QueueFlags> requiredQueues = { vk::QueueFlagBits::eGraphics };
+  mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "Vulkan Test Application", 1, VK_API_VERSION_1_0, requiredQueues));
+  mQueue = mDeviceInstance->getQueue(requiredQueues[0]);
+  if( !mQueue ) throw std::runtime_error("Failed to get graphics queue from device");
 
   // Find out what queues are available
   //auto queueFamilyProps = dev.getQueueFamilyProperties();
@@ -26,7 +30,7 @@ void VulkanApp::initVK() {
   // To do this we also need to specify how many queues from which families we want to create
   // In this case just 1 queue from the first family which supports graphics
 
-  mWindowIntegration.reset(new WindowIntegration(*mDeviceInstance.get(), mWindow));
+  mWindowIntegration.reset(new WindowIntegration(*mDeviceInstance.get(), *mQueue, mWindow));
 
   mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get()));
 
@@ -79,11 +83,11 @@ void VulkanApp::initVK() {
   }
 
   // TODO: Misfit
-  mCommandPool = mDeviceInstance->createCommandPool( { vk::CommandPoolCreateFlagBits::eResetCommandBuffer
+  mCommandPool = mDeviceInstance->createCommandPool( { vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
                                                        /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
                                                           vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
                                                                                                                                               */
-                                                     });
+                                                     }, *mQueue);
 
   // Now make a command buffer for each framebuffer
   auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo()
@@ -271,7 +275,7 @@ void VulkanApp::loop() {
 
     vk::ArrayProxy<vk::SubmitInfo> submits(submitInfo);
     // submit, signal the frame fence at the end
-    mDeviceInstance->queue().submit(submits.size(), submits.data(), frameFence);
+    mQueue->queue.submit(submits.size(), submits.data(), frameFence);
 
     // Present the results of a frame to the swap chain
     vk::SwapchainKHR swapChains[] = {mWindowIntegration->swapChain()};
@@ -286,7 +290,7 @@ void VulkanApp::loop() {
 
     // TODO: Force-using a single queue for both graphics and present
     // Some systems may not be able to support this
-    mDeviceInstance->queue().presentKHR(presentInfo);
+    mQueue->queue.presentKHR(presentInfo);
   }
 }
 

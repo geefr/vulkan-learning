@@ -14,6 +14,12 @@
 class DeviceInstance
 {
 public:
+  struct QueueRef {
+    vk::Queue queue;
+    uint32_t famIndex;
+    vk::QueueFlags flags;
+  };
+
   DeviceInstance() = delete;
   DeviceInstance(const DeviceInstance&) = delete;
   DeviceInstance(DeviceInstance&&) = delete;
@@ -31,23 +37,28 @@ public:
       const std::vector<const char*>& requiredDeviceExtensions,
       const std::string& appName,
       uint32_t appVer,
-      uint32_t vulkanApiVer = VK_API_VERSION_1_0,
-      vk::QueueFlags qFlags = vk::QueueFlagBits::eGraphics);
+      uint32_t vulkanApiVer,
+      std::vector<vk::QueueFlags> qFlags);
 
 
   vk::Instance& instance() { return mInstance.get(); }
   vk::Device& device() { return mDevice.get(); }
   std::vector<vk::PhysicalDevice>& physicalDevices() { return mPhysicalDevices; }
   vk::PhysicalDevice& physicalDevice() { return mPhysicalDevices.front(); }
-  uint32_t queueFamilyIndex() { return mQueueFamIndex; }
-  vk::Queue& queue() { return mQueues.front(); }
+
+  /**
+   * Get the nth queue for the request flags
+   *
+   * flags should be one of the flag sets passed to the constructor
+   */
+  DeviceInstance::QueueRef* getQueue( vk::QueueFlags flags );
 
   /// Wait until all physical devices are idle
   void waitAllDevicesIdle();
 
 
   // Buffer/etc creation functions
-  vk::UniqueCommandPool createCommandPool( vk::CommandPoolCreateFlags flags );
+  vk::UniqueCommandPool createCommandPool( vk::CommandPoolCreateFlags flags, DeviceInstance::QueueRef& queue );
   vk::UniqueBuffer createBuffer( vk::DeviceSize size, vk::BufferUsageFlags usageFlags );
   /// Select a device memory heap based on flags (vk::MemoryRequirements::memoryTypeBits)
   uint32_t selectDeviceMemoryHeap( vk::MemoryRequirements memoryRequirements, vk::MemoryPropertyFlags requiredFlags );
@@ -65,19 +76,15 @@ public:
 
 private:
   void createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer = VK_API_VERSION_1_0);
-  void createLogicalDevice(vk::QueueFlags qFlags);
-  void createLogicalDevice();
+  void createLogicalDevice(std::vector<vk::QueueFlags> qFlags);
 
 
   std::vector<vk::PhysicalDevice> mPhysicalDevices;
 
   vk::UniqueInstance mInstance;
   vk::UniqueDevice mDevice;
-  // TODO: Initially a single queue chosen based on init
-  // Queue really should be separated from this bit, or at least more flexible
-  // to allow multiple named queues
-  uint32_t mQueueFamIndex = std::numeric_limits<uint32_t>::max();
-  std::vector<vk::Queue> mQueues;
+
+  std::vector<QueueRef> mQueues;
 };
 
 #endif // DEVICEINSTANCE_H

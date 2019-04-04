@@ -1,23 +1,21 @@
 #include "windowintegration.h"
-#include "deviceinstance.h"
 
 #include <iostream>
 
-WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance)
+WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue)
   : mDeviceInstance(deviceInstance) {
 }
 
-WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance, GLFWwindow* window)
-  : WindowIntegration(deviceInstance) {
+WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, GLFWwindow* window)
+  : WindowIntegration(deviceInstance, queue) {
   createSurfaceGLFW(window);
-  createSwapChain();
+  createSwapChain(queue);
   createSwapChainImageViews();
 }
 
 WindowIntegration::~WindowIntegration() {
   for(auto& p : mSwapChainImageViews) p.reset();
   mSwapChain.reset();
-  //mSurface.reset();
   vkDestroySurfaceKHR(mDeviceInstance.instance(), mSurface, nullptr);
 }
 
@@ -29,13 +27,12 @@ void WindowIntegration::createSurfaceGLFW(GLFWwindow* window) {
     throw std::runtime_error("createSurfaceGLFW: Failed to create window surface");
   }
   mSurface = surface;
-  //mSurface.reset(surface);
 }
 #endif
 
 
-void WindowIntegration::createSwapChain() {
-  if( !mDeviceInstance.physicalDevice().getSurfaceSupportKHR(mDeviceInstance.queueFamilyIndex(), mSurface) ) throw std::runtime_error("createSwapChainXlib: Physical device doesn't support surfaces");
+void WindowIntegration::createSwapChain(DeviceInstance::QueueRef& queue) {
+  if( !mDeviceInstance.physicalDevice().getSurfaceSupportKHR(queue.famIndex, mSurface) ) throw std::runtime_error("createSwapChainXlib: Physical device doesn't support surfaces");
 
   // Parameters used in swapchain must comply with limits of the surface
   auto caps = mDeviceInstance.physicalDevice().getSurfaceCapabilitiesKHR(mSurface);

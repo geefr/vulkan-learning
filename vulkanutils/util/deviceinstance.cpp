@@ -8,7 +8,7 @@ DeviceInstance::DeviceInstance(
     const std::string& appName,
     uint32_t appVer,
     uint32_t vulkanApiVer,
-    vk::QueueFlags qFlags) {
+    std::vector<vk::QueueFlags> qFlags) {
   createVulkanInstance(requiredInstanceExtensions, appName, appVer, vulkanApiVer);
   // TODO: Need to split device and queue creation apart
   createLogicalDevice(qFlags);
@@ -93,13 +93,26 @@ void DeviceInstance::createVulkanInstance(const std::vector<const char*>& requir
   });
 }
 
-void DeviceInstance::createLogicalDevice(vk::QueueFlags qFlags ) {
-  mQueueFamIndex = Util::findQueue(*this, qFlags);
-  createLogicalDevice();
-}
+void DeviceInstance::createLogicalDevice(std::vector<vk::QueueFlags> qFlags) {
 
-void DeviceInstance::createLogicalDevice() {
-  if( mQueueFamIndex > mPhysicalDevices.size() ) throw std::runtime_error("createLogicalDevice: Physical device doesn't support required queue types");
+  std::vector<vk::DeviceQueueCreateInfo> queueInfo;
+  auto qFamProps = mPhysicalDevices[0].getQueueFamilyProperties();
+  float queuePriorities = 1.f;
+  for( auto& qF : qFlags ) {
+    auto it = std::find_if(qFamProps.begin(), qFamProps.end(), [&](auto& p) {
+      if( p.queueFlags & qF ) return true;
+      return false;
+    });
+    if( it != qFamProps.end() ) {
+      auto qInfo = vk::DeviceQueueCreateInfo()
+          .setFlags({})
+          .setQueueFamilyIndex(static_cast<uint32_t>(it - qFamProps.begin()))
+          .setQueueCount(1)
+          .setPQueuePriorities(&queuePriorities);
+      queueInfo.emplace_back(qInfo);
+    }
+  }
+  if( queueInfo.size() != qFlags.size() )  throw std::runtime_error("createLogicalDevice: Physical device doesn't support requested queue types");
 
   auto supportedExtensions = mPhysicalDevices.front().enumerateDeviceExtensionProperties();
   std::vector<const char*> enabledDeviceExtensions;
@@ -119,14 +132,6 @@ void DeviceInstance::createLogicalDevice() {
   const char* const* enabledLayerNames = nullptr;
 #endif
 
-  float queuePriorities = 1.f;
-  auto queueInfo = vk::DeviceQueueCreateInfo()
-      .setFlags({})
-      .setQueueFamilyIndex(mQueueFamIndex)
-      .setQueueCount(1)
-      .setPQueuePriorities(&queuePriorities)
-      ;
-
   // The features of the physical device
   auto deviceSupportedFeatures = mPhysicalDevices.front().getFeatures();
 
@@ -140,8 +145,8 @@ void DeviceInstance::createLogicalDevice() {
 
   auto info = vk::DeviceCreateInfo()
       .setFlags({})
-      .setQueueCreateInfoCount(1)
-      .setPQueueCreateInfos(&queueInfo)
+      .setQueueCreateInfoCount(queueInfo.size())
+      .setPQueueCreateInfos(queueInfo.data())
       .setEnabledLayerCount(enabledLayerCount)
       .setPpEnabledLayerNames(enabledLayerNames)
       .setEnabledExtensionCount(static_cast<uint32_t>(enabledDeviceExtensions.size()))
@@ -151,7 +156,23 @@ void DeviceInstance::createLogicalDevice() {
 
   mDevice = mPhysicalDevices.front().createDeviceUnique(info);
 
-  mQueues.emplace_back( mDevice->getQueue(mQueueFamIndex, 0) );
+  for( auto i=0u; i < qFlags.size(); ++i ) {
+    auto famIdx = queueInfo[i].queueFamilyIndex;
+
+    auto qRef = QueueRef();
+    qRef.famIndex = famIdx;
+    qRef.queue = mDevice->getQueue(famIdx, 0);
+    qRef.flags = qFlags[i];
+    mQueues.emplace_back( qRef );
+  }
+}
+
+DeviceInstance::QueueRef* DeviceInstance::getQueue( vk::QueueFlags flags ) {
+  auto it = std::find_if(mQueues.begin(), mQueues.end(), [&]( auto& q) {
+    return flags == q.flags;
+  });
+  if( it == mQueues.end() ) return nullptr;
+  return &(*it);
 }
 
 void DeviceInstance::waitAllDevicesIdle() {
@@ -159,10 +180,10 @@ void DeviceInstance::waitAllDevicesIdle() {
 }
 
 
-vk::UniqueCommandPool DeviceInstance::createCommandPool( vk::CommandPoolCreateFlags flags ) {
+vk::UniqueCommandPool DeviceInstance::createCommandPool( vk::CommandPoolCreateFlags flags, DeviceInstance::QueueRef& queue ) {
   auto info = vk::CommandPoolCreateInfo()
       .setFlags(flags)
-      .setQueueFamilyIndex(mQueueFamIndex); // TODO: Hack! should be passed by caller/some reference to the command queue class we don't have yet
+      .setQueueFamilyIndex(queue.famIndex);
   return mDevice->createCommandPoolUnique(info);
 }
 

@@ -79,6 +79,9 @@ private:
   std::unique_ptr<FrameBuffer> mFrameBuffer;
   std::unique_ptr<GraphicsPipeline> mGraphicsPipeline;
 
+  DeviceInstance::QueueRef* mGraphicsQueue = nullptr;
+  DeviceInstance::QueueRef* mComputeQueue = nullptr;
+
   vk::UniqueCommandPool mCommandPool;
   std::vector<vk::UniqueCommandBuffer> mCommandBuffers;
 
