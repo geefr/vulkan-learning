@@ -4,6 +4,7 @@
 #include <iostream>
 
 using glm::vec3;
+using glm::vec4;
 
 Physics::Physics(uint32_t numParticles) {
   std::random_device rd;
@@ -13,11 +14,11 @@ Physics::Physics(uint32_t numParticles) {
   std::uniform_real_distribution<> disC(0.0,1.0);
   for( auto i = 0u; i < numParticles; ++i ) {
     auto p = Particle();
-    p.position = {dis(rdGen), dis(rdGen), dis(rdGen)};
+    p.position = {dis(rdGen), 0.f /*dis(rdGen)*/, dis(rdGen), 1};
     p.mass = static_cast<float>(disM(rdGen));
-    p.colour = {disC(rdGen), disC(rdGen), disC(rdGen)};
+    p.colour = {disC(rdGen), disC(rdGen), disC(rdGen), 1};
 
-    p.velocity = vec3(0,10,0);
+    p.velocity = vec4(0,10,0, 1);
     //p.velocity = vec3(dis(rdGen), dis(rdGen), dis(rdGen)) / 100.0f;
 
     mParticles.emplace_back(p);
@@ -38,11 +39,11 @@ void Physics::step(float dT) {
     calcForce(p);
     updatePosAndVel(p, dT);
 
-
+    // TODO: Need to fix their positions here, otherwise they'll slowly fall through the floor
     auto& pos = p.position;
-    if( pos.x < -100 || pos.x > 100 ) p.velocity *= vec3(-.9,0,0);
-    if( pos.y < -100 || pos.y > 100 ) p.velocity *= vec3(0,-.9,0);
-    if( pos.z < -100 || pos.z > 100 ) p.velocity *= vec3(0,0,-.9);
+    if( pos.x < -100 || pos.x > 100 ) {p.velocity *= vec4(-.9,0,0,1); }
+    if( pos.y < -100 || pos.y > 100 ) {p.velocity *= vec4(0,-.9,0,1); }
+    if( pos.z < -100 || pos.z > 100 ) {p.velocity *= vec4(0,0,-.9,1); }
 
 
   }
@@ -55,7 +56,7 @@ void Physics::calcForce(Particle& p) {
   p.force += mFixedGravity * p.mass;
 
 
-  glm::vec3 pointGravVec = normalize(p.position - mPointGravityLocation);
+  glm::vec4 pointGravVec = normalize(p.position - mPointGravityLocation);
   p.force += mPointGravityMagnitude * pointGravVec;
 
 
@@ -73,8 +74,10 @@ void Physics::calcForce(Particle& p) {
 }
 
 void Physics::updatePosAndVel(Particle& p, float dT) {
-  vec3 a = p.force / p.mass;
+  vec4 a = p.force / p.mass;
   p.velocity += a * dT;
+  // TODO:
+  p.velocity.w = 1;
   p.position += p.velocity * dT;
 }
 

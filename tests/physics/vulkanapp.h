@@ -36,7 +36,7 @@ class VulkanApp
 {
 public:
   // TODO: Must be a multiple of 4, we don't validate buffer size before throwing at vulkan
-  VulkanApp() : mPhysics(10000) {}
+  VulkanApp() : mPhysics(10) {}
   ~VulkanApp(){}
 
   void run() {
@@ -60,7 +60,7 @@ private:
   void createComputeBuffers();
   void createComputeDescriptorSet();
   void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer, vk::Buffer& particleVertexBuffer);
-  void buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer);
+  void buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer, bool uploadParticles);
   void loop();
   void cleanup();
   double now();
@@ -78,15 +78,12 @@ private:
 
 
   // TODO: Hardcoded buffer sizes
-  uint32_t mComputeBufferWidth = 1000;
+  uint32_t mComputeBufferWidth = 10;
   uint32_t mComputeBufferHeight = 1;
   uint32_t mComputeBufferDepth = 1;
   uint32_t mComputeGroupSizeX = 1;
   uint32_t mComputeGroupSizeY = 1;
   uint32_t mComputeGroupSizeZ = 1;
-  struct computeThing {
-    float stuff;
-  };
   std::vector<std::unique_ptr<SimpleBuffer>> mComputeDataBuffers;
   vk::UniqueDescriptorPool mComputeDescriptorPool;
   vk::DescriptorSet mComputeDescriptorSet; // Owned by pool

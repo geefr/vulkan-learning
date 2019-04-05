@@ -144,7 +144,7 @@ void VulkanApp::initVK() {
     mComputeCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
     for( auto i = 0u; i < mComputeCommandBuffers.size(); ++i ) {
       auto commandBuffer = mComputeCommandBuffers[i].get();
-      buildComputeCommandBuffer(commandBuffer);
+      buildComputeCommandBuffer(commandBuffer, true);
     }
   }
 }
@@ -253,7 +253,7 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
   commandBuffer.end();
 }
 
-void VulkanApp::buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer) {
+void VulkanApp::buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer, bool uploadParticles) {
   auto beginInfo = vk::CommandBufferBeginInfo()
       .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution
       .setPInheritanceInfo(nullptr);
@@ -296,13 +296,13 @@ void VulkanApp::createVertexBuffers() {
 void VulkanApp::createComputeBuffers() {
   // 0 - input buffer
   // 1 - output buffer
-  auto bufSize = sizeof(computeThing) * mComputeBufferWidth * mComputeBufferHeight * mComputeBufferDepth;
+  auto bufSize = sizeof(Physics::Particle) * mComputeBufferWidth * mComputeBufferHeight * mComputeBufferDepth;
   for( auto i = 0u; i < 2; ++i ) {
     mComputeDataBuffers.emplace_back( new SimpleBuffer(
                                          *mDeviceInstance.get(),
                                          bufSize,
                                          vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-                                         /*vk::MemoryPropertyFlagBits::eDeviceLocal*/ vk::MemoryPropertyFlagBits::eHostVisible) );
+                                         /*vk::MemoryPropertyFlagBits::eDeviceLocal*/ vk::MemoryPropertyFlagBits::eHostVisible ) );
   }
 }
 
@@ -368,41 +368,7 @@ void VulkanApp::loop() {
   float modelRot = 0.f;
 
 
-
-
-  // TODO: Hacky compute test thing :O
-  {
-    auto sourceData = reinterpret_cast<float*>(mComputeDataBuffers[0]->map());
-    auto f = 0.f;
-    for( auto z = 0u; z < mComputeBufferDepth; ++z )
-      for( auto y = 0u; y < mComputeBufferHeight; ++y )
-        for( auto x = 0u; x < mComputeBufferWidth; ++x ) {
-          sourceData[(z * mComputeBufferWidth * mComputeBufferHeight) + (y * mComputeBufferWidth) + x] = f;
-          f += .1f;
-        }
-    mComputeDataBuffers[0]->flush();
-    mComputeDataBuffers[0]->unmap();
-
-    auto subInfo = vk::SubmitInfo()
-        .setCommandBufferCount(1)
-        .setPCommandBuffers(&mComputeCommandBuffers[0].get());
-    auto fence = mDeviceInstance->device().createFenceUnique({});
-    mComputeQueue->queue.submit(1, &subInfo, fence.get());
-    mDeviceInstance->device().waitForFences(1, &fence.get(), true, std::numeric_limits<uint64_t>::max());
-
-    auto destData = reinterpret_cast<float*>(mComputeDataBuffers[1]->map());
-    mComputeDataBuffers[1]->flush();
-    for( auto z = 0u; z < mComputeBufferDepth; ++z )
-      for( auto y = 0u; y < mComputeBufferHeight; ++y )
-        for( auto x = 0u; x < mComputeBufferWidth; ++x ) {
-          std::cout << "Computed data [" << x << "," << y << "," << z << "] = " << destData[(z * mComputeBufferWidth * mComputeBufferHeight) + (y * mComputeBufferWidth) + x] << std::endl;
-        }
-
-    mComputeDataBuffers[0]->unmap();
-  }
-
-  return;
-
+  // TODO: Need to run a command buffer for uploading all the particlebois
 
   while(!glfwWindowShouldClose(mWindow) ) {//&& iter++ < maxIter) {
 
@@ -423,12 +389,49 @@ void VulkanApp::loop() {
     // Wait for the last frame to finish rendering
     mDeviceInstance->device().waitForFences(1, &mFrameInFlightFences[frameIndex].get(), true, std::numeric_limits<uint64_t>::max());
 
-
     // Physics hacks
     mLastTime = mCurTime;
     mCurTime = now();
 
-    mPhysics.step(static_cast<float>(mCurTime - mLastTime));
+    // TODO: Hacky compute test
+    // Obviously we don't want to sync and read back to the cpu and such
+    // but this proves the concept
+    {
+      auto sourceData = reinterpret_cast<Physics::Particle*>(mComputeDataBuffers[0]->map());
+      std::memcpy(sourceData, mPhysics.particles().data(), mComputeDataBuffers[0]->size());
+      /*
+      auto f = 0.f;
+      for( auto z = 0u; z < mComputeBufferDepth; ++z )
+        for( auto y = 0u; y < mComputeBufferHeight; ++y )
+          for( auto x = 0u; x < mComputeBufferWidth; ++x ) {
+            sourceData[(z * mComputeBufferWidth * mComputeBufferHeight) + (y * mComputeBufferWidth) + x] = f;
+            f += .1f;
+          }*/
+      mComputeDataBuffers[0]->flush();
+      mComputeDataBuffers[0]->unmap();
+
+      auto subInfo = vk::SubmitInfo()
+          .setCommandBufferCount(1)
+          .setPCommandBuffers(&mComputeCommandBuffers[0].get());
+      auto fence = mDeviceInstance->device().createFenceUnique({});
+      mComputeQueue->queue.submit(1, &subInfo, fence.get());
+      mDeviceInstance->device().waitForFences(1, &fence.get(), true, std::numeric_limits<uint64_t>::max());
+
+      auto destData = reinterpret_cast<Physics::Particle*>(mComputeDataBuffers[1]->map());
+      mComputeDataBuffers[1]->flush();
+      for( auto z = 0u; z < mComputeBufferDepth; ++z )
+        for( auto y = 0u; y < mComputeBufferHeight; ++y )
+          for( auto x = 0u; x < mComputeBufferWidth; ++x ) {
+            auto off = (z * mComputeBufferWidth * mComputeBufferHeight) + (y * mComputeBufferWidth) + x;
+            mPhysics.particles()[(z * y * z) + (x * y) + x] = destData[off];
+          }
+      mComputeDataBuffers[1]->unmap();
+      //mPhysics.logParticles();
+
+      mDeviceInstance->waitAllDevicesIdle();
+    }
+
+    //mPhysics.step(static_cast<float>(mCurTime - mLastTime));
     //mPhysics.logParticles();
 
     // Setup matrices
@@ -514,9 +517,7 @@ void VulkanApp::loop() {
 void VulkanApp::cleanup() {
   // Explicitly cleanup the vulkan objects here
   // Ensure they are shut down before terminating glfw
-  // TODO: Could wrap the glfw stuff in a smart pointer and
-  // remove the need for this method
-
+  // TODO: Destruction order matters, and somehow it's wrong despite having the smart pointers here
   mDeviceInstance->waitAllDevicesIdle();
 
   mFrameInFlightFences.clear();
@@ -538,6 +539,8 @@ void VulkanApp::cleanup() {
 
   mDeviceInstance.reset();
 
+  // TODO: Could wrap the glfw stuff in a smart pointer and
+  // remove the need for this method
   glfwDestroyWindow(mWindow);
   glfwTerminate();
 }

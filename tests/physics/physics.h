@@ -11,13 +11,20 @@ public:
   /**
    * A Particle
    * All units are in meters/SI units
+   *
+   * vec4's are used here as packing rules mean vec3's would use 16 bytes anyway
+   * To keep things simple here let's just maintain a 16-byte alignment for everything
+   * and pad if we can't meet that
    */
   struct Particle {
-    glm::vec3 position = {0,0,0};
-    glm::vec3 velocity = {0,0,0};
+    glm::vec4 position = {0,0,0,1};
+    glm::vec4 velocity = {0,0,0,1};
+    glm::vec4 force = {0,0,0,1};
+    glm::vec4 colour = {1,1,1,1};
     float mass = 1; // Kg
-    glm::vec3 force = {0,0,0};
-    glm::vec3 colour = {1,1,1};
+    float pad1;
+    float pad2;
+    float pad3;
   };
 
   Physics() = delete;
@@ -27,7 +34,7 @@ public:
 
   void step( float dT );
 
-  const std::vector<Particle>& particles() const { return mParticles; }
+  std::vector<Particle>& particles() { return mParticles; }
 
 private:
   void calcForce(Particle& p);
@@ -37,10 +44,10 @@ private:
 
   std::vector<Particle> mParticles;
 
-  glm::vec3 mFixedGravity = {0,-0.5,0};
+  glm::vec4 mFixedGravity = {0,-0.5,0,1};
 
   float mPointGravityMagnitude = 0.25;
-  glm::vec3 mPointGravityLocation = {0,-90,0};
+  glm::vec4 mPointGravityLocation = {0,-90,0,1};
 };
 
 #endif // PHYSICS_H

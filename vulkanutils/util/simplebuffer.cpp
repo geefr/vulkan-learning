@@ -26,12 +26,15 @@ SimpleBuffer::~SimpleBuffer() {
 
 void* SimpleBuffer::map() {
   if( mMapped ) return nullptr;
-  return  mDeviceInstance.mapMemory(mDeviceMemory.get(), 0, VK_WHOLE_SIZE);
+  auto res = mDeviceInstance.mapMemory(mDeviceMemory.get(), 0, VK_WHOLE_SIZE);
+  mMapped = true;
+  return res;
 }
 
 void SimpleBuffer::unmap() {
   if( !mMapped ) return;
    mDeviceInstance.unmapMemory(mDeviceMemory.get());
+   mMapped = false;
 }
 
 void SimpleBuffer::flush() {

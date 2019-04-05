@@ -1,8 +1,20 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-#define compDataWidth 1000
+#define compDataWidth 10
 #define compDataHeight 1
+#define compDataDepth 1
+
+struct Particle {
+  vec4 position;
+  vec4 velocity;
+  vec4 force;
+  vec4 colour;
+  float mass;
+  float pad1;
+  float pad2;
+  float pad3;
+};
 
 // Work group size
 // For a simple example mainly arbitrary, but for more complex stuff would matter
@@ -10,21 +22,36 @@
 // so group size would be like the block size in an image compression algorithm or such
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
-layout(binding = 0) buffer inputBuffer {
-  float inputBuf[];
+layout(binding = 0) buffer inputParticles {
+  Particle inParticles[];
 };
+
 layout(binding = 1) buffer outputBuffer {
-  float outputBuf[];
+  Particle outParticles[];
 };
 
 void main(){
   // Some unnecesary threads are launched in order to fit work into workgroups, terminate them
-  if( gl_GlobalInvocationID.x >= compDataWidth || gl_GlobalInvocationID.y >= compDataHeight)
+  if( gl_GlobalInvocationID.x >= compDataWidth || gl_GlobalInvocationID.y >= compDataHeight || gl_GlobalInvocationID.z >= compDataDepth )
     return;
 
   // Fetch the input data
-  uint bufOffset = (compDataWidth * gl_GlobalInvocationID.y) + gl_GlobalInvocationID.x;
+  uint i = (compDataWidth * gl_GlobalInvocationID.y) + gl_GlobalInvocationID.x;
+  Particle part = inParticles[i];
 
-  // As an initial test just copy to the output buffer
-  outputBuf[bufOffset] = inputBuf[bufOffset];
+  // TODO: Actual physics
+  float dT = 0.1;
+  vec4 grav = vec4(0,-10,0,1);
+  float m = part.mass;
+  vec4 f = part.force + (grav * m);
+
+  vec4 a = f / m;
+  vec4 v = part.velocity + (a * dT);
+  vec4 p = part.position + (v * dT);
+
+  outParticles[i].position = p;
+  outParticles[i].velocity = v;
+  outParticles[i].force = f;
+  outParticles[i].colour = inParticles[i].colour;
+  outParticles[i].mass = inParticles[i].mass;
 }
