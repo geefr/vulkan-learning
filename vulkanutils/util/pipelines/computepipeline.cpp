@@ -46,17 +46,3 @@ void ComputePipeline::createPipeline() {
 
   mPipeline = mDeviceInstance.device().createComputePipelineUnique({}, pipelineInfo);
 }
-
-std::vector<vk::PipelineShaderStageCreateInfo> ComputePipeline::createShaderStageInfo() {
-  std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
-  if( mShader ) {
-    auto vertInfo = vk::PipelineShaderStageCreateInfo()
-        .setFlags({})
-        .setStage(vk::ShaderStageFlagBits::eCompute)
-        .setModule(mShader)
-        .setPName("main")
-        .setPSpecializationInfo(nullptr);
-    return {vertInfo};
-  }
-  return {};
-}

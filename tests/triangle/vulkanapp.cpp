@@ -37,10 +37,8 @@ void VulkanApp::initVK() {
   // Build the graphics pipeline
   // In this case we can throw away the shader modules after building as they're only used by the one pipeline
   {
-    auto vertShader = mGraphicsPipeline->createShaderModule("vert.spv");
-    auto fragShader = mGraphicsPipeline->createShaderModule("frag.spv");
-    mGraphicsPipeline->shaders().mVertexShader = vertShader.get();
-    mGraphicsPipeline->shaders().mFragmentShader = fragShader.get();
+    mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eVertex] = mGraphicsPipeline->createShaderModule("vert.spv");
+    mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eFragment] = mGraphicsPipeline->createShaderModule("frag.spv");
 
     // The layout of our vertex buffers
     auto vertBufferBinding = vk::VertexInputBindingDescription()

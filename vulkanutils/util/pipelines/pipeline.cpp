@@ -49,5 +49,17 @@ void Pipeline::createDescriptorSetLayouts() {
   }
 }
 
-
-
+std::vector<vk::PipelineShaderStageCreateInfo> Pipeline::createShaderStageInfo() {
+  std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
+  for( auto& s : mShaders ) {
+    auto specConstants = mSpecialisationConstants.find(s.first);
+    auto info = vk::PipelineShaderStageCreateInfo()
+        .setFlags({})
+        .setStage(s.first)
+        .setModule(s.second.get())
+        .setPName("main")
+        .setPSpecializationInfo(specConstants == mSpecialisationConstants.end() ? nullptr : &(specConstants->second));
+    shaderStages.emplace_back(info);
+  }
+  return shaderStages;
+}

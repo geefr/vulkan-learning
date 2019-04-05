@@ -15,7 +15,7 @@ void main() {
   gl_Position = push.projM * push.viewM * push.modelM * vec4(vert_partPos,1.0);
 
   // Set the particle size based on dimensions
-  gl_PointSize = 1;
+  gl_PointSize = 4;
 
   fragColour = vec4(vert_colour, 1.0);
 

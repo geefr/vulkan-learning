@@ -220,26 +220,4 @@ void GraphicsPipeline::createPipeline() {
   // Shader modules deleted here, only needed for pipeline init
 }
 
-std::vector<vk::PipelineShaderStageCreateInfo> GraphicsPipeline::createShaderStageInfo() {
-  std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
-  if( mShaders.mVertexShader ) {
-    auto vertInfo = vk::PipelineShaderStageCreateInfo()
-        .setFlags({})
-        .setStage(vk::ShaderStageFlagBits::eVertex)
-        .setModule(mShaders.mVertexShader)
-        .setPName("main")
-        .setPSpecializationInfo(nullptr);
-    shaderStages.emplace_back(vertInfo);
-  }
-  if( mShaders.mFragmentShader ) {
-    auto fragInfo = vk::PipelineShaderStageCreateInfo()
-        .setFlags({})
-        .setStage(vk::ShaderStageFlagBits::eFragment)
-        .setModule(mShaders.mFragmentShader)
-        .setPName("main")
-        .setPSpecializationInfo(nullptr);
-    shaderStages.emplace_back(fragInfo);
-  }
-  return shaderStages;
-}
 

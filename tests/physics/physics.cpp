@@ -10,7 +10,7 @@ Physics::Physics(uint32_t numParticles) {
   std::random_device rd;
   std::mt19937 rdGen(rd());
   std::uniform_real_distribution<> dis(-10.0, 10.0);
-  std::uniform_real_distribution<> disM(0.1, 10.0);
+  std::uniform_real_distribution<> disM(0.1, 100.0);
   std::uniform_real_distribution<> disC(0.0,1.0);
   for( auto i = 0u; i < numParticles; ++i ) {
     auto p = Particle();
@@ -18,8 +18,8 @@ Physics::Physics(uint32_t numParticles) {
     p.mass = static_cast<float>(disM(rdGen));
     p.colour = {disC(rdGen), disC(rdGen), disC(rdGen), 1};
 
-    p.velocity = vec4(0,10,0, 1);
-    //p.velocity = vec3(dis(rdGen), dis(rdGen), dis(rdGen)) / 100.0f;
+    //p.velocity = vec4(0,10,0, 1);
+    p.velocity = vec4(dis(rdGen), dis(rdGen), dis(rdGen), 1);// / 100.0f;
 
     mParticles.emplace_back(p);
   }

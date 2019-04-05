@@ -18,18 +18,9 @@ public:
   ComputePipeline(DeviceInstance& deviceInstance);
   virtual ~ComputePipeline() final override {}
 
-  /// Shader to build into the pipeline
-  vk::ShaderModule& shader() { return mShader; }
-
-  vk::Pipeline& pipeline() { return mPipeline.get(); }
-  vk::PipelineLayout& pipelineLayout() { return mPipelineLayout.get(); }
-
 private:
   void createPipeline() final override;
   void createDescriptorSetLayouts();
-  std::vector<vk::PipelineShaderStageCreateInfo> createShaderStageInfo() final override;
-
-  vk::ShaderModule mShader;
 };
 
 #endif

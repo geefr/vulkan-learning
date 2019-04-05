@@ -44,10 +44,8 @@ void VulkanApp::initVK() {
   // Build the graphics pipeline
   // In this case we can throw away the shader modules after building as they're only used by the one pipeline
   {
-    auto vertShader = mGraphicsPipeline->createShaderModule("vert.spv");
-    auto fragShader = mGraphicsPipeline->createShaderModule("frag.spv");
-    mGraphicsPipeline->shaders().mVertexShader = vertShader.get();
-    mGraphicsPipeline->shaders().mFragmentShader = fragShader.get();
+    mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eVertex] = mGraphicsPipeline->createShaderModule("vert.spv");
+    mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eFragment] = mGraphicsPipeline->createShaderModule("frag.spv");
     mGraphicsPipeline->inputAssembly_primitiveTopology(vk::PrimitiveTopology::ePointList);
 
     // The layout of our vertex buffers
@@ -73,11 +71,21 @@ void VulkanApp::initVK() {
 
   // Build the compute pipeline
   {
-    auto compShader = mComputePipeline->createShaderModule("comp.spv");
-    mComputePipeline->shader() = compShader.get();
+    mComputePipeline->shaders()[vk::ShaderStageFlagBits::eCompute] = mComputePipeline->createShaderModule("comp.spv");
     // Input and output buffers to compute shader
     mComputePipeline->addDescriptorSetLayoutBinding(0, 0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute);
     mComputePipeline->addDescriptorSetLayoutBinding(0, 1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute);
+
+    mComputeSpecConstants.mComputeBufferWidth = static_cast<uint32_t>(mPhysics.particles().size());
+    vk::SpecializationMapEntry specs[] = {
+      {0, offsetof(ComputeSpecConstants, mComputeBufferWidth), sizeof(uint32_t)},
+      {1, offsetof(ComputeSpecConstants, mComputeBufferHeight), sizeof(uint32_t)},
+      {2, offsetof(ComputeSpecConstants, mComputeBufferDepth), sizeof(uint32_t)},
+      {3, offsetof(ComputeSpecConstants, mComputeGroupSizeX), sizeof(uint32_t)},
+      {4, offsetof(ComputeSpecConstants, mComputeGroupSizeY), sizeof(uint32_t)},
+      {5, offsetof(ComputeSpecConstants, mComputeGroupSizeZ), sizeof(uint32_t)},
+    };
+    mComputePipeline->specialisationConstants()[vk::ShaderStageFlagBits::eCompute] = vk::SpecializationInfo(6, specs, sizeof(ComputeSpecConstants), &mComputeSpecConstants);
 
     mComputePipeline->build();
   }
@@ -184,7 +192,7 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
 
   // As we're uploading a huge amount of data this isn't exactly sensible
   // Upload in chunks to avoid the 65K limit for now, I'll improve this later as this is clearly the limiting factor for performance
-  auto chunkSize = 1000u;
+  auto chunkSize = 500u;
   for( auto i = 0u; i < mPhysics.particles().size(); i+=chunkSize ) {
     auto numToUpload = chunkSize;
     if( i + numToUpload >= mPhysics.particles().size() ) {
@@ -272,7 +280,9 @@ void VulkanApp::buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer, bool
   // Dispatch the pipeline - equivalent of a 'draw'
   // Number of groups is specified here, size of a group is set in the shader
   // TODO: Set group sizes in shaders as specialisation constants so the number synchronise nicely
-  commandBuffer.dispatch(mComputeBufferWidth / mComputeGroupSizeX, mComputeBufferHeight / mComputeGroupSizeY, mComputeBufferDepth / mComputeGroupSizeZ );
+  commandBuffer.dispatch(mComputeSpecConstants.mComputeBufferWidth / mComputeSpecConstants.mComputeGroupSizeX,
+                         mComputeSpecConstants.mComputeBufferHeight / mComputeSpecConstants.mComputeGroupSizeY,
+                         mComputeSpecConstants.mComputeBufferDepth / mComputeSpecConstants.mComputeGroupSizeZ );
 
   // End the command buffer
   commandBuffer.end();
@@ -296,7 +306,7 @@ void VulkanApp::createVertexBuffers() {
 void VulkanApp::createComputeBuffers() {
   // 0 - input buffer
   // 1 - output buffer
-  auto bufSize = sizeof(Physics::Particle) * mComputeBufferWidth * mComputeBufferHeight * mComputeBufferDepth;
+  auto bufSize = sizeof(Physics::Particle) * mComputeSpecConstants.mComputeBufferWidth * mComputeSpecConstants.mComputeBufferHeight * mComputeSpecConstants.mComputeBufferDepth;
   for( auto i = 0u; i < 2; ++i ) {
     mComputeDataBuffers.emplace_back( new SimpleBuffer(
                                          *mDeviceInstance.get(),
@@ -364,7 +374,7 @@ void VulkanApp::loop() {
   auto iter = 0u;
 
 
-  glm::vec3 eyePos = { 0,90,90 };
+  glm::vec3 eyePos = { 0,50,110 };
   float modelRot = 0.f;
 
 
@@ -419,10 +429,10 @@ void VulkanApp::loop() {
 
       auto destData = reinterpret_cast<Physics::Particle*>(mComputeDataBuffers[1]->map());
       mComputeDataBuffers[1]->flush();
-      for( auto z = 0u; z < mComputeBufferDepth; ++z )
-        for( auto y = 0u; y < mComputeBufferHeight; ++y )
-          for( auto x = 0u; x < mComputeBufferWidth; ++x ) {
-            auto off = (z * mComputeBufferWidth * mComputeBufferHeight) + (y * mComputeBufferWidth) + x;
+      for( auto z = 0u; z < mComputeSpecConstants.mComputeBufferDepth; ++z )
+        for( auto y = 0u; y < mComputeSpecConstants.mComputeBufferHeight; ++y )
+          for( auto x = 0u; x < mComputeSpecConstants.mComputeBufferWidth; ++x ) {
+            auto off = (z * mComputeSpecConstants.mComputeBufferWidth * mComputeSpecConstants.mComputeBufferHeight) + (y * mComputeSpecConstants.mComputeBufferWidth) + x;
             mPhysics.particles()[(z * y * z) + (x * y) + x] = destData[off];
           }
       mComputeDataBuffers[1]->unmap();

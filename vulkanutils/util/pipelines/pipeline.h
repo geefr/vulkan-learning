@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include <vector>
+#include <map>
 
 class DeviceInstance;
 
@@ -35,8 +36,13 @@ public:
    */
   vk::UniqueShaderModule createShaderModule(const std::string& fileName);
 
+  std::map<vk::ShaderStageFlagBits, vk::UniqueShaderModule>& shaders() { return mShaders; }
+
   vk::Pipeline& pipeline() { return mPipeline.get(); }
   vk::PipelineLayout& pipelineLayout() { return mPipelineLayout.get(); }
+
+  /// Specialisation constants
+  std::map<vk::ShaderStageFlagBits, vk::SpecializationInfo>& specialisationConstants() { return mSpecialisationConstants; }
 
   /**
    * Descriptor set layout bindings
@@ -56,10 +62,11 @@ public:
 protected:
   virtual void createPipeline() = 0;
   void createDescriptorSetLayouts();
-  virtual std::vector<vk::PipelineShaderStageCreateInfo> createShaderStageInfo() = 0;
+  std::vector<vk::PipelineShaderStageCreateInfo> createShaderStageInfo();
 
   DeviceInstance& mDeviceInstance;
-
+  std::map<vk::ShaderStageFlagBits, vk::UniqueShaderModule> mShaders;
+  std::map<vk::ShaderStageFlagBits, vk::SpecializationInfo> mSpecialisationConstants;
   /// Layout index, binding info
   std::vector<std::vector<vk::DescriptorSetLayoutBinding>> mDescriptorSetLayoutBindings;
   std::vector<vk::UniqueDescriptorSetLayout> mDescriptorSetLayouts;
