@@ -95,7 +95,12 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Util::debugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData) {
 
-  // TODO: Proper debug callback, this probably doesn't even work
+  // TODO: Proper debug callback
+  /*
+  if( messageSeverity & (int)vk::DebugUtilsMessageSeverityFlagBitsEXT::eError ) {
+    std::cerr << "Vulkan ERROR: " << pCallbackData->pMessage << std::endl;
+    std::exit(1);
+  }*/
   std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
 
   return VK_FALSE;

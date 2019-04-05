@@ -8,7 +8,7 @@ if( NOT CMAKE_BUILD_TYPE )
 endif()
 
 # Compiler/Tool requirements
-set( CMAKE_CXX_STANDARD 17 )
+set( CMAKE_CXX_STANDARD 20 )
 
 if( CMAKE_BUILD_TYPE MATCHES "Debug" )
   add_compile_definitions( DEBUG )
@@ -39,6 +39,10 @@ endif()
 
 find_package(glfw3 REQUIRED)
 add_compile_definitions( USE_GLFW )
+
+find_package(glm REQUIRED)
+# Set glm to be compatible with vulkan
+add_compile_definitions( GLM_DEPTH_ZERO_TO_ONE GLM_FORCE_LEFT_HANDED )
 
 set( VULKANUTILS_LIB_TYPE STATIC )
 

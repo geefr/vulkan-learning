@@ -5,7 +5,7 @@
 #include "util/deviceinstance.h"
 #include "util/framebuffer.h"
 #include "util/simplebuffer.h"
-#include "util/graphicspipeline.h"
+#include "util/pipelines/graphicspipeline.h"
 
 #ifdef USE_GLFW
 # define GLFW_INCLUDE_VULKAN
@@ -77,6 +77,8 @@ private:
   std::unique_ptr<WindowIntegration> mWindowIntegration;
   std::unique_ptr<FrameBuffer> mFrameBuffer;
   std::unique_ptr<GraphicsPipeline> mGraphicsPipeline;
+
+  DeviceInstance::QueueRef* mQueue = nullptr;
 
   vk::UniqueCommandPool mCommandPool;
   std::vector<vk::UniqueCommandBuffer> mCommandBuffers;

@@ -9,7 +9,7 @@
 #endif
 #include <vulkan/vulkan.hpp>
 
-class DeviceInstance;
+#include "deviceinstance.h"
 
 /**
  * Functionality for window system integration, swapchains and such
@@ -18,13 +18,13 @@ class WindowIntegration
 {
 public:
   WindowIntegration() = delete;
-  WindowIntegration(DeviceInstance& deviceInstance);
+  WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, vk::PresentModeKHR presentMode = vk::PresentModeKHR::eFifo);
   WindowIntegration(const WindowIntegration&) = delete;
   WindowIntegration(WindowIntegration&&) = default;
   ~WindowIntegration();
 
 #ifdef USE_GLFW
-  WindowIntegration(DeviceInstance& deviceInstance, GLFWwindow* window);
+  WindowIntegration(GLFWwindow* window, DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, vk::PresentModeKHR presentMode = vk::PresentModeKHR::eFifo);
 #endif
 
   // TODO: Giving direct access like this is dangerous, clean this up
@@ -39,7 +39,7 @@ private:
   void createSurfaceGLFW(GLFWwindow* window);
 #endif
 
-  void createSwapChain();
+  void createSwapChain(DeviceInstance::QueueRef& queue);
   void createSwapChainImageViews();
 
   DeviceInstance& mDeviceInstance;
@@ -62,6 +62,7 @@ private:
   // will be destructed in reverse order
   vk::UniqueSwapchainKHR mSwapChain;
   std::vector<vk::UniqueImageView> mSwapChainImageViews;
+  vk::PresentModeKHR mPresentMode;
 };
 
 #endif // WINDOWINTEGRATION_H
