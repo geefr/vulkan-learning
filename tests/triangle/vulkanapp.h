@@ -5,7 +5,7 @@
 #include "util/deviceinstance.h"
 #include "util/framebuffer.h"
 #include "util/simplebuffer.h"
-#include "util/graphicspipeline.h"
+#include "util/pipelines/graphicspipeline.h"
 
 #ifdef USE_GLFW
 # define GLFW_INCLUDE_VULKAN

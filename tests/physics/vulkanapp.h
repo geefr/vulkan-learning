@@ -5,8 +5,8 @@
 #include "util/deviceinstance.h"
 #include "util/framebuffer.h"
 #include "util/simplebuffer.h"
-#include "util/graphicspipeline.h"
-#include "util/computepipeline.h"
+#include "util/pipelines/graphicspipeline.h"
+#include "util/pipelines/computepipeline.h"
 
 #include "physics.h"
 
@@ -36,7 +36,7 @@ class VulkanApp
 {
 public:
   // TODO: Must be a multiple of 4, we don't validate buffer size before throwing at vulkan
-  VulkanApp() : mPhysics(10) {}
+  VulkanApp() : mPhysics(1000) {}
   ~VulkanApp(){}
 
   void run() {
@@ -78,7 +78,7 @@ private:
 
 
   // TODO: Hardcoded buffer sizes
-  uint32_t mComputeBufferWidth = 10;
+  uint32_t mComputeBufferWidth = 1000;
   uint32_t mComputeBufferHeight = 1;
   uint32_t mComputeBufferDepth = 1;
   uint32_t mComputeGroupSizeX = 1;

@@ -1,5 +1,5 @@
-#ifndef COMPUTEPIPELINE_H
-#define COMPUTEPIPELINE_H
+#ifndef PIPELINE_H
+#define PIPELINE_H
 
 #include <vulkan/vulkan.hpp>
 
@@ -8,12 +8,13 @@
 class DeviceInstance;
 
 /**
- * Class to setup/manage a compute pipeline
+ * Base class for pipelines, holds common data between various types
  */
-class ComputePipeline
+class Pipeline
 {
 public:
-  ComputePipeline(DeviceInstance& deviceInstance);
+  Pipeline(DeviceInstance& deviceInstance);
+  virtual ~Pipeline(){}
 
   /**
    * Initialisation
@@ -34,9 +35,6 @@ public:
    */
   vk::UniqueShaderModule createShaderModule(const std::string& fileName);
 
-  /// Shader to build into the pipeline
-  vk::ShaderModule& shader() { return mShader; }
-
   vk::Pipeline& pipeline() { return mPipeline.get(); }
   vk::PipelineLayout& pipelineLayout() { return mPipelineLayout.get(); }
 
@@ -55,14 +53,12 @@ public:
   /// Push Constants
   std::vector<vk::PushConstantRange>& pushConstants() { return mPushConstants; }
 
-private:
-  void createPipeline();
+protected:
+  virtual void createPipeline() = 0;
   void createDescriptorSetLayouts();
-  vk::PipelineShaderStageCreateInfo createShaderStageInfo();
+  virtual std::vector<vk::PipelineShaderStageCreateInfo> createShaderStageInfo() = 0;
 
   DeviceInstance& mDeviceInstance;
-
-  vk::ShaderModule mShader;
 
   /// Layout index, binding info
   std::vector<std::vector<vk::DescriptorSetLayoutBinding>> mDescriptorSetLayoutBindings;

@@ -8,15 +8,9 @@
 #include <map>
 
 GraphicsPipeline::GraphicsPipeline(WindowIntegration& windowIntegration, DeviceInstance& deviceInstance)
-  : mWindowIntegration(windowIntegration)
-  , mDeviceInstance(deviceInstance) {
+  : Pipeline(deviceInstance)
+  , mWindowIntegration(windowIntegration) {
 
-}
-
-vk::Pipeline& GraphicsPipeline::build() {
-  createRenderPass();
-  createGraphicsPipeline();
-  return mPipeline.get();
 }
 
 void GraphicsPipeline::createRenderPass() {
@@ -88,7 +82,7 @@ void GraphicsPipeline::createRenderPass() {
   mRenderPass = mDeviceInstance.device().createRenderPassUnique(renderPassInfo);
 }
 
-void GraphicsPipeline::createGraphicsPipeline() {
+void GraphicsPipeline::createPipeline() {
   /*
    * The programmable parts of the pipeline are similar to gl
    * And in this case the shaders were even compiled from glsl -> SPIR-V
@@ -96,6 +90,7 @@ void GraphicsPipeline::createGraphicsPipeline() {
 
   // Later we just need to hand a pile of shaders to the pipeline
   auto shaderStages = createShaderStageInfo();
+  createRenderPass();
 
   /*
    * Then there's the fixed function sections of the pipeline
@@ -223,19 +218,6 @@ void GraphicsPipeline::createGraphicsPipeline() {
   mPipeline = mDeviceInstance.device().createGraphicsPipelineUnique({}, pipelineInfo);
 
   // Shader modules deleted here, only needed for pipeline init
-}
-
-vk::UniqueShaderModule GraphicsPipeline::createShaderModule(const std::string& fileName) {
-  auto shaderCode = Util::readFile(fileName);
-  // Note that data passed to info is as uint32_t*, so must be 4-byte aligned
-  // According to tutorial std::vector already satisfies worst case alignment needs
-  // TODO: But we should probably double check the alignment here just incase
-  auto info = vk::ShaderModuleCreateInfo()
-      .setFlags({})
-      .setCodeSize(shaderCode.size())
-      .setPCode(reinterpret_cast<const uint32_t*>(shaderCode.data()))
-      ;
-  return mDeviceInstance.device().createShaderModuleUnique(info);
 }
 
 std::vector<vk::PipelineShaderStageCreateInfo> GraphicsPipeline::createShaderStageInfo() {
