@@ -30,7 +30,7 @@ void VulkanApp::initVK() {
   // To do this we also need to specify how many queues from which families we want to create
   // In this case just 1 queue from the first family which supports graphics
 
-  mWindowIntegration.reset(new WindowIntegration(*mDeviceInstance.get(), *mQueue, mWindow));
+  mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mQueue));
 
   mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get()));
 

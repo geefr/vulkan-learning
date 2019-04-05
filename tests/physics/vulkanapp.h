@@ -36,7 +36,7 @@ class VulkanApp
 {
 public:
   // TODO: Must be a multiple of 4, we don't validate buffer size before throwing at vulkan
-  VulkanApp() : mPhysics(2500000) {}
+  VulkanApp() : mPhysics(5000000) {}
   ~VulkanApp(){}
 
   void run() {
@@ -56,7 +56,6 @@ public:
 private:
   void initWindow();
   void initVK();
-  //void createVertexBuffers();
   void createComputeBuffers();
   void createComputeDescriptorSet();
 
@@ -66,7 +65,7 @@ private:
   /// Setup for initial upload of particle buffer
   void buildComputeCommandBufferDataUpload(vk::CommandBuffer& commandBuffer, SimpleBuffer& targetBuffer);
   /// Setup for particle simulation
-  void buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer, vk::DescriptorSet& descriptorSet);
+  void buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer, vk::DescriptorSet& descriptorSet, vk::Buffer& particleVertexBuffer);
 
   void loop();
   void cleanup();
@@ -81,10 +80,6 @@ private:
   float mPushConstantsScaleFactorDelta = 0.025f;
   int scaleCount = 0;
 
-  //std::vector<std::unique_ptr<SimpleBuffer>> mParticleVertexBuffers;
-
-
-  // TODO: Hardcoded buffer sizes
   struct ComputeSpecConstants {
     uint32_t mComputeBufferWidth = 1000;
     uint32_t mComputeBufferHeight = 1;

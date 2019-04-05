@@ -2,12 +2,13 @@
 
 #include <iostream>
 
-WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue)
-  : mDeviceInstance(deviceInstance) {
+WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, vk::PresentModeKHR presentMode)
+  : mDeviceInstance(deviceInstance)
+  , mPresentMode(presentMode) {
 }
 
-WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, GLFWwindow* window)
-  : WindowIntegration(deviceInstance, queue) {
+WindowIntegration::WindowIntegration(GLFWwindow* window, DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, vk::PresentModeKHR presentMode)
+  : WindowIntegration(deviceInstance, queue, presentMode) {
   createSurfaceGLFW(window);
   createSwapChain(queue);
   createSwapChainImageViews();
@@ -76,7 +77,7 @@ void WindowIntegration::createSwapChain(DeviceInstance::QueueRef& queue) {
       .setImageSharingMode(vk::SharingMode::eExclusive)
       .setPreTransform(caps.currentTransform)
       .setCompositeAlpha(alphaMode)
-      .setPresentMode(vk::PresentModeKHR::eFifo)
+      .setPresentMode(mPresentMode)
       .setClipped(true)
       .setOldSwapchain({})
       ;

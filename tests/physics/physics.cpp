@@ -14,7 +14,7 @@ Physics::Physics(uint32_t numParticles) {
   std::uniform_real_distribution<> disC(0.0,1.0);
   for( auto i = 0u; i < numParticles; ++i ) {
     auto p = Particle();
-    p.position = {dis(rdGen), 0.f /*dis(rdGen)*/, dis(rdGen), 1};
+    p.position = {dis(rdGen), dis(rdGen), dis(rdGen), 1};
     p.mass = static_cast<float>(disM(rdGen));
     p.colour = {disC(rdGen), disC(rdGen), disC(rdGen), 1};
 
