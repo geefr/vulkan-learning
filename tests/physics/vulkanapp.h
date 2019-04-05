@@ -36,7 +36,7 @@ class VulkanApp
 {
 public:
   // TODO: Must be a multiple of 4, we don't validate buffer size before throwing at vulkan
-  VulkanApp() : mPhysics(10000) {}
+  VulkanApp() : mPhysics(1000000) {}
   ~VulkanApp(){}
 
   void run() {
@@ -56,11 +56,18 @@ public:
 private:
   void initWindow();
   void initVK();
-  void createVertexBuffers();
+  //void createVertexBuffers();
   void createComputeBuffers();
   void createComputeDescriptorSet();
+
+  /// Setup for rendering
   void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer, vk::Buffer& particleVertexBuffer);
-  void buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer, bool uploadParticles);
+
+  /// Setup for initial upload of particle buffer
+  void buildComputeCommandBufferDataUpload(vk::CommandBuffer& commandBuffer, SimpleBuffer& targetBuffer);
+  /// Setup for particle simulation
+  void buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer, vk::DescriptorSet& descriptorSet);
+
   void loop();
   void cleanup();
   double now();
@@ -74,7 +81,7 @@ private:
   float mPushConstantsScaleFactorDelta = 0.025f;
   int scaleCount = 0;
 
-  std::vector<std::unique_ptr<SimpleBuffer>> mParticleVertexBuffers;
+  //std::vector<std::unique_ptr<SimpleBuffer>> mParticleVertexBuffers;
 
 
   // TODO: Hardcoded buffer sizes
@@ -89,7 +96,7 @@ private:
   ComputeSpecConstants mComputeSpecConstants;
   std::vector<std::unique_ptr<SimpleBuffer>> mComputeDataBuffers;
   vk::UniqueDescriptorPool mComputeDescriptorPool;
-  vk::DescriptorSet mComputeDescriptorSet; // Owned by pool
+  std::vector<vk::DescriptorSet> mComputeDescriptorSets; // Owned by pool
   vk::UniqueCommandPool mComputeCommandPool;
   std::vector<vk::UniqueCommandBuffer> mComputeCommandBuffers;
 

@@ -59,6 +59,7 @@ void VulkanApp::initVK() {
     // TODO: If we're really only care about position/dimensions here uploading the whole buffer to the gpu is kinda wasteful
     mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Physics::Particle, position));
     mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Physics::Particle, colour));
+    mGraphicsPipeline->vertexInputAttributes().emplace_back(2, 0, vk::Format::eR32G32B32Sfloat, offsetof(Physics::Particle, radius));
 
     // Register our push constant block
     mPushContantsRange = vk::PushConstantRange()
@@ -107,9 +108,31 @@ void VulkanApp::initVK() {
   }
 
   // Create buffers
-  createVertexBuffers();
+  //createVertexBuffers();
   createComputeBuffers();
   createComputeDescriptorSet();
+
+  // Command pool/buffers for compute
+  // TODO: If both queue pointers are the same should maybe use a single pool?
+  {
+    mComputeCommandPool = mDeviceInstance->createCommandPool( { vk::CommandPoolCreateFlagBits::eResetCommandBuffer
+                                                         /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
+                                                            vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
+                                                                                                                                                */
+                                                       }, *mComputeQueue);
+
+    // Now make a command buffer for each framebuffer
+    auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo()
+        .setCommandPool(mComputeCommandPool.get())
+        .setCommandBufferCount(static_cast<uint32_t>(mMaxFramesInFlight))
+        .setLevel(vk::CommandBufferLevel::ePrimary);
+    mComputeCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
+    /*
+    for( auto i = 0u; i < mComputeCommandBuffers.size(); ++i ) {
+      auto commandBuffer = mComputeCommandBuffers[i].get();
+      buildComputeCommandBuffer(commandBuffer);
+    }*/
+  }
 
   // TODO: Could be utilitised
   // Command pool/buffers for rendering
@@ -128,32 +151,11 @@ void VulkanApp::initVK() {
         ;
 
     mCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
-
+/*
     for( auto i = 0u; i < mCommandBuffers.size(); ++i ) {
       auto commandBuffer = mCommandBuffers[i].get();
       buildCommandBuffer(commandBuffer, mFrameBuffer->frameBuffers()[i].get(), mParticleVertexBuffers[i]->buffer());
-    }
-  }
-
-  // Command pool/buffers for compute
-  // TODO: If both queue pointers are the same should maybe use a single pool?
-  {
-    mComputeCommandPool = mDeviceInstance->createCommandPool( { vk::CommandPoolCreateFlagBits::eResetCommandBuffer
-                                                         /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
-                                                            vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
-                                                                                                                                                */
-                                                       }, *mComputeQueue);
-
-    // Now make a command buffer for each framebuffer
-    auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo()
-        .setCommandPool(mComputeCommandPool.get())
-        .setCommandBufferCount(static_cast<uint32_t>(1))
-        .setLevel(vk::CommandBufferLevel::ePrimary);
-    mComputeCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
-    for( auto i = 0u; i < mComputeCommandBuffers.size(); ++i ) {
-      auto commandBuffer = mComputeCommandBuffers[i].get();
-      buildComputeCommandBuffer(commandBuffer, true);
-    }
+    }*/
   }
 }
 
@@ -178,30 +180,6 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
   renderPassInfo.renderArea.offset = vk::Offset2D(0,0);
   renderPassInfo.renderArea.extent = mWindowIntegration->extent();
 
-  auto particleBufSize = static_cast<uint32_t>(mPhysics.particles().size() * sizeof(Physics::Particle));
-
-  // TODO: Remove the need to push the entire buffer here
-  // Mapping the buffer may be better, but we'd at least want a set of buffers to rotate through and would need to deal with synchronisation
-  // Better would be to push the whole physics simulation onto the gpu (the real intention of this sample) and then only need to
-  // push information about external forces and such in
-  //
-  // We're also limited to 65Kb here, which is an entirely sane and reasonable restriction to place on such a function
-  //
-  // This however does work, and is a super convenient way to get data in
-  // This would be the way to update uniform buffers and such if not using the push constant block
-
-  // As we're uploading a huge amount of data this isn't exactly sensible
-  // Upload in chunks to avoid the 65K limit for now, I'll improve this later as this is clearly the limiting factor for performance
-  auto chunkSize = 500u;
-  for( auto i = 0u; i < mPhysics.particles().size(); i+=chunkSize ) {
-    auto numToUpload = chunkSize;
-    if( i + numToUpload >= mPhysics.particles().size() ) {
-      numToUpload = static_cast<uint32_t>(mPhysics.particles().size() - i);
-    }
-
-    commandBuffer.updateBuffer(particleVertexBuffer, i * sizeof(Physics::Particle), numToUpload * sizeof(Physics::Particle), mPhysics.particles().data() + i);
-  }
-
   // While this is a nice way to update buffer contents we do need to synchronise, this is counted as a 'transfer operation' for synchronisation
   // This may seem to work without the barrier here, as we've got 1 copy of the buffer per fif, and have already ensured the previous execution
   // of this command buffer has finished with the fence
@@ -213,6 +191,7 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
   // Remember:
   // - Access flags should be as minimal as possible here
   // - Barriers must be outside a render pass (there's an exception to this, but keep it simple for now)
+  /*
   auto particleBufferBarrier = vk::BufferMemoryBarrier()
       .setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
       .setDstAccessMask(vk::AccessFlagBits::eVertexAttributeRead)
@@ -220,8 +199,8 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
       .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
       .setBuffer(particleVertexBuffer)
       .setOffset(0)
-      .setSize(VK_WHOLE_SIZE)
-      ;
+      .setSize(VK_WHOLE_SIZE);
+
   commandBuffer.pipelineBarrier(
         vk::PipelineStageFlagBits::eTransfer,
         vk::PipelineStageFlagBits::eVertexInput,
@@ -230,7 +209,7 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
         1, &particleBufferBarrier,
         0, nullptr
         );
-
+*/
   // render commands will be embedded in primary buffer and no secondary command buffers
   // will be executed
   commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
@@ -248,7 +227,7 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
   vk::DeviceSize offsets[] = { 0 };
   commandBuffer.bindVertexBuffers(0, 1, buffers, offsets);
 
-  commandBuffer.draw(mPhysics.particles().size(), // Draw n vertices
+  commandBuffer.draw(static_cast<uint32_t>(mPhysics.particles().size()), // Draw n vertices
                      1, // Used for instanced rendering, 1 otherwise
                      0, // First vertex
                      0  // First instance
@@ -261,7 +240,7 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
   commandBuffer.end();
 }
 
-void VulkanApp::buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer, bool uploadParticles) {
+void VulkanApp::buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer, vk::DescriptorSet& descriptorSet) {
   auto beginInfo = vk::CommandBufferBeginInfo()
       .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution
       .setPInheritanceInfo(nullptr);
@@ -274,7 +253,7 @@ void VulkanApp::buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer, bool
   commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute,
                                    mComputePipeline->pipelineLayout(),
                                    0, 1,
-                                   &mComputeDescriptorSet,
+                                   &descriptorSet,
                                    0, nullptr);
 
   // Dispatch the pipeline - equivalent of a 'draw'
@@ -288,6 +267,29 @@ void VulkanApp::buildComputeCommandBuffer(vk::CommandBuffer& commandBuffer, bool
   commandBuffer.end();
 }
 
+void VulkanApp::buildComputeCommandBufferDataUpload(vk::CommandBuffer& commandBuffer, SimpleBuffer& targetBuffer) {
+  auto beginInfo = vk::CommandBufferBeginInfo()
+      .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution
+      .setPInheritanceInfo(nullptr);
+  commandBuffer.begin(beginInfo);
+
+  // Upload initial buffer state into target buffer
+  auto particleBufSize = static_cast<uint32_t>(mPhysics.particles().size() * sizeof(Physics::Particle));
+  auto chunkSize = 65536 / sizeof(Physics::Particle);
+  if( chunkSize == 0 ) chunkSize = static_cast<uint32_t>(mPhysics.particles().size());
+  for( auto i = 0u; i < mPhysics.particles().size(); i+=chunkSize ) {
+    auto numToUpload = chunkSize;
+    if( i + numToUpload >= mPhysics.particles().size() ) {
+      numToUpload = static_cast<uint32_t>(mPhysics.particles().size() - i);
+    }
+
+    commandBuffer.updateBuffer(targetBuffer.buffer(), i * sizeof(Physics::Particle), numToUpload * sizeof(Physics::Particle), mPhysics.particles().data() + i);
+  }
+
+  // End the command buffer
+  commandBuffer.end();
+}
+/*
 void VulkanApp::createVertexBuffers() {
   // Our particles
   // TODO: This is device local to avoid allocating a large host-accessible buffer
@@ -301,18 +303,18 @@ void VulkanApp::createVertexBuffers() {
                                          vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
                                          vk::MemoryPropertyFlagBits::eDeviceLocal) );
   }
-}
+}*/
 
 void VulkanApp::createComputeBuffers() {
   // 0 - input buffer
   // 1 - output buffer
   auto bufSize = sizeof(Physics::Particle) * mComputeSpecConstants.mComputeBufferWidth * mComputeSpecConstants.mComputeBufferHeight * mComputeSpecConstants.mComputeBufferDepth;
-  for( auto i = 0u; i < 2; ++i ) {
+  for( auto i = 0u; i < mWindowIntegration->swapChainImages().size(); ++i ) {
     mComputeDataBuffers.emplace_back( new SimpleBuffer(
                                          *mDeviceInstance.get(),
                                          bufSize,
-                                         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-                                         /*vk::MemoryPropertyFlagBits::eDeviceLocal*/ vk::MemoryPropertyFlagBits::eHostVisible ) );
+                                         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+                                         vk::MemoryPropertyFlagBits::eDeviceLocal /*vk::MemoryPropertyFlagBits::eHostVisible*/ ) );
   }
 }
 
@@ -320,52 +322,63 @@ void VulkanApp::createComputeDescriptorSet() {
   // Create a descriptor pool, to allocate descriptor sets from
   auto poolSize = vk::DescriptorPoolSize()
       .setType(vk::DescriptorType::eStorageBuffer)
-      .setDescriptorCount(2);
+      .setDescriptorCount(mMaxFramesInFlight * 2);
+
   auto poolInfo = vk::DescriptorPoolCreateInfo()
       .setFlags({})
-      .setMaxSets(1)
+      .setMaxSets(mMaxFramesInFlight)
       .setPoolSizeCount(1)
       .setPPoolSizes(&poolSize);
   mComputeDescriptorPool = mDeviceInstance->device().createDescriptorPoolUnique(poolInfo);
 
-  // Create the descriptor set
-  const vk::DescriptorSetLayout dsLayouts[] = {mComputePipeline->descriptorSetLayouts()[0].get()};
-  auto dsInfo = vk::DescriptorSetAllocateInfo()
-      .setDescriptorPool(mComputeDescriptorPool.get())
-      .setDescriptorSetCount(1)
-      .setPSetLayouts(dsLayouts);
-  auto sets = mDeviceInstance->device().allocateDescriptorSets(dsInfo);
-  mComputeDescriptorSet = std::move(sets.front()); sets.clear();
+  // Create the descriptor sets, one for each particle buffer
+  for( auto i = 0u; i < mMaxFramesInFlight; ++i ) {
+    const vk::DescriptorSetLayout dsLayouts[] = {mComputePipeline->descriptorSetLayouts()[0].get()};
 
-  // Update the descriptor set to map to the buffers
-  std::vector<vk::DescriptorBufferInfo> uInfos;
-  for( auto i = 0u; i < mComputeDataBuffers.size(); ++i ) {
-    auto& buf = mComputeDataBuffers[i];
-    auto uInfo = vk::DescriptorBufferInfo()
-        .setBuffer(buf->buffer())
-        .setOffset(0)
-        .setRange(VK_WHOLE_SIZE);
-    uInfos.emplace_back(uInfo);
+    auto dsInfo = vk::DescriptorSetAllocateInfo()
+        .setDescriptorPool(mComputeDescriptorPool.get())
+        .setDescriptorSetCount(1)
+        .setPSetLayouts(dsLayouts);
+    auto sets = mDeviceInstance->device().allocateDescriptorSets(dsInfo);
+    mComputeDescriptorSets.emplace_back(std::move(sets.front())); sets.clear();
   }
 
-  auto wInfo = vk::WriteDescriptorSet()
-      .setDstSet(mComputeDescriptorSet)
-      .setDstBinding(0)
-      .setDstArrayElement(0)
-      .setDescriptorCount(2)
-      .setDescriptorType(vk::DescriptorType::eStorageBuffer)
-      .setPImageInfo(nullptr)
-      .setPBufferInfo(uInfos.data())
-      .setPTexelBufferView(nullptr);
+  for( auto i = 0u; i < mMaxFramesInFlight; ++i ) {
+    auto& sourceBuffer = mComputeDataBuffers[i];
+    auto& destBuffer = mComputeDataBuffers[i == mMaxFramesInFlight - 1 ? 0 : i + 1];
 
-  mDeviceInstance->device().updateDescriptorSets(1, &wInfo, 0, nullptr);
+    // Update the descriptor set to map to the buffers
+    std::vector<vk::DescriptorBufferInfo> uInfos;
+    auto uInfo1 = vk::DescriptorBufferInfo()
+        .setBuffer(sourceBuffer->buffer())
+        .setOffset(0)
+        .setRange(VK_WHOLE_SIZE);
+    uInfos.emplace_back(uInfo1);
+
+    auto uInfo2 = vk::DescriptorBufferInfo()
+        .setBuffer(destBuffer->buffer())
+        .setOffset(0)
+        .setRange(VK_WHOLE_SIZE);
+    uInfos.emplace_back(uInfo2);
+
+    auto wInfo = vk::WriteDescriptorSet()
+        .setDstSet(mComputeDescriptorSets[i])
+        .setDstBinding(0)
+        .setDstArrayElement(0)
+        .setDescriptorCount(static_cast<uint32_t>(uInfos.size()))
+        .setDescriptorType(vk::DescriptorType::eStorageBuffer)
+        .setPImageInfo(nullptr)
+        .setPBufferInfo(uInfos.data())
+        .setPTexelBufferView(nullptr);
+
+    mDeviceInstance->device().updateDescriptorSets(1, &wInfo, 0, nullptr);
+  }
 }
 
 void VulkanApp::loop() {
   auto frameIndex = 0u;
 
-  std::once_flag windowShown;
-  std::call_once(windowShown, [&win=mWindow](){glfwShowWindow(win);});
+  glfwShowWindow(mWindow);
 
   mLastTime = now();
   mCurTime = mLastTime;
@@ -373,28 +386,29 @@ void VulkanApp::loop() {
   auto maxIter = 100u;
   auto iter = 0u;
 
-
   glm::vec3 eyePos = { 0,50,110 };
   float modelRot = 0.f;
 
+  // Seed the particle buffer with data
+  {
+    buildComputeCommandBufferDataUpload(mComputeCommandBuffers[0].get(), *mComputeDataBuffers[0].get());
+    auto subInfo = vk::SubmitInfo()
+        .setCommandBufferCount(1)
+        .setPCommandBuffers(&mComputeCommandBuffers[0].get());
+    auto fence = mDeviceInstance->device().createFenceUnique({});
+    mComputeQueue->queue.submit(1, &subInfo, fence.get());
+    mDeviceInstance->device().waitForFences(1, &fence.get(), true, std::numeric_limits<uint64_t>::max());
+  }
 
-  // TODO: Need to run a command buffer for uploading all the particlebois
+  // Rebuild the compute command buffer for running the pipeline
+  // TODO
+  for( auto i = 0u; i < mMaxFramesInFlight; ++i ) {
+    buildComputeCommandBuffer(mComputeCommandBuffers[i].get(), mComputeDescriptorSets[i]);
+  }
 
   while(!glfwWindowShouldClose(mWindow) ) {//&& iter++ < maxIter) {
 
     glfwPollEvents();
-/*
-    mPushConstants.scale += mPushConstantsScaleFactorDelta;
-    if( mPushConstants.scale > 2.0f ) mPushConstantsScaleFactorDelta = -.025f;
-    if( mPushConstants.scale < 0.25f ) {
-      mPushConstantsScaleFactorDelta = .025f;
-      scaleCount++;
-    }
-    if( scaleCount == 1 ) {
-      scaleCount = 0;
-      if( mGeomName == "triangle" ) mGeomName = "rectangle";
-      else if( mGeomName == "rectangle" ) mGeomName = "triangle";
-    }*/
 
     // Wait for the last frame to finish rendering
     mDeviceInstance->device().waitForFences(1, &mFrameInFlightFences[frameIndex].get(), true, std::numeric_limits<uint64_t>::max());
@@ -403,42 +417,19 @@ void VulkanApp::loop() {
     mLastTime = mCurTime;
     mCurTime = now();
 
-    // TODO: Hacky compute test
-    // Obviously we don't want to sync and read back to the cpu and such
-    // but this proves the concept
+    // Run the compute pipeline
     {
-      auto sourceData = reinterpret_cast<Physics::Particle*>(mComputeDataBuffers[0]->map());
-      std::memcpy(sourceData, mPhysics.particles().data(), mComputeDataBuffers[0]->size());
-      /*
-      auto f = 0.f;
-      for( auto z = 0u; z < mComputeBufferDepth; ++z )
-        for( auto y = 0u; y < mComputeBufferHeight; ++y )
-          for( auto x = 0u; x < mComputeBufferWidth; ++x ) {
-            sourceData[(z * mComputeBufferWidth * mComputeBufferHeight) + (y * mComputeBufferWidth) + x] = f;
-            f += .1f;
-          }*/
-      mComputeDataBuffers[0]->flush();
-      mComputeDataBuffers[0]->unmap();
-
       auto subInfo = vk::SubmitInfo()
           .setCommandBufferCount(1)
-          .setPCommandBuffers(&mComputeCommandBuffers[0].get());
+          .setPCommandBuffers(&mComputeCommandBuffers[frameIndex].get());
       auto fence = mDeviceInstance->device().createFenceUnique({});
+
+      // TODO: Get rid of this
       mComputeQueue->queue.submit(1, &subInfo, fence.get());
       mDeviceInstance->device().waitForFences(1, &fence.get(), true, std::numeric_limits<uint64_t>::max());
 
-      auto destData = reinterpret_cast<Physics::Particle*>(mComputeDataBuffers[1]->map());
-      mComputeDataBuffers[1]->flush();
-      for( auto z = 0u; z < mComputeSpecConstants.mComputeBufferDepth; ++z )
-        for( auto y = 0u; y < mComputeSpecConstants.mComputeBufferHeight; ++y )
-          for( auto x = 0u; x < mComputeSpecConstants.mComputeBufferWidth; ++x ) {
-            auto off = (z * mComputeSpecConstants.mComputeBufferWidth * mComputeSpecConstants.mComputeBufferHeight) + (y * mComputeSpecConstants.mComputeBufferWidth) + x;
-            mPhysics.particles()[(z * y * z) + (x * y) + x] = destData[off];
-          }
-      mComputeDataBuffers[1]->unmap();
-      //mPhysics.logParticles();
-
-      mDeviceInstance->waitAllDevicesIdle();
+      // TODO: Get rid of this
+      // mDeviceInstance->waitAllDevicesIdle();
     }
 
     //mPhysics.step(static_cast<float>(mCurTime - mLastTime));
@@ -455,10 +446,6 @@ void VulkanApp::loop() {
     mPushConstants.viewMatrix = glm::lookAt( eyePos, glm::vec3(0,-100,0), glm::vec3(0,-1,0));
     mPushConstants.projMatrix = glm::perspective(glm::radians(90.f),static_cast<float>(mWindowWidth / mWindowHeight), 0.001f,1000.f);
 
-    // Advance to next frame index, loop at max
-    frameIndex++;
-    if( frameIndex == mMaxFramesInFlight ) frameIndex = 0;
-
     // Reset the fence - fences must be reset before being submitted
     auto frameFence = mFrameInFlightFences[frameIndex].get();
     mDeviceInstance->device().resetFences(1, &frameFence);
@@ -472,26 +459,24 @@ void VulkanApp::loop() {
 
     // Submit the command buffer
     vk::SubmitInfo submitInfo = {};
-    auto commandBuffer = mCommandBuffers[imageIndex].get();
+    auto commandBuffer = mCommandBuffers[frameIndex].get();
     auto frameBuffer = mFrameBuffer->frameBuffers()[imageIndex].get();
 
     // Rebuild the command buffer every frame
     // This isn't the most efficient but we're at least re-using the command buffer
     // In a most complex application we would have multiple command buffers and only rebuild
     // the section that needs changing..I think
-    buildCommandBuffer(commandBuffer, frameBuffer, mParticleVertexBuffers[imageIndex]->buffer());
+    //
+    // Data buffer here is the output buffer of the compute pass, so 1 ahead of frameIndex
+    auto vertBufIndex = frameIndex + 1;
+    if( vertBufIndex == mMaxFramesInFlight ) vertBufIndex = 0;
+    buildCommandBuffer(commandBuffer, frameBuffer, mComputeDataBuffers[vertBufIndex]->buffer());
 
     // Don't execute until this is ready
     vk::Semaphore waitSemaphores[] = {mImageAvailableSemaphores[frameIndex].get()};
     // place the wait before writing to the colour attachment
 
-    // If we have render pass depedencies
     vk::PipelineStageFlags waitStages[] {vk::PipelineStageFlagBits::eColorAttachmentOutput};
-
-    // Otherwise wait until the pipeline starts to allow reading?
-    //vk::PipelineStageFlags waitStages[] {vk::PipelineStageFlagBits::eTopOfPipe};
-
-
     // Signal this semaphore when rendering is done
     vk::Semaphore signalSemaphores[] = {mRenderFinishedSemaphores[frameIndex].get()};
     submitInfo.setWaitSemaphoreCount(1)
@@ -515,12 +500,12 @@ void VulkanApp::loop() {
         .setSwapchainCount(1)
         .setPSwapchains(swapChains)
         .setPImageIndices(&imageIndex)
-        .setPResults(nullptr)
-        ;
-
-    // TODO: Force-using a single queue for both graphics and present
-    // Some systems may not be able to support this
+        .setPResults(nullptr);
     mGraphicsQueue->queue.presentKHR(presentInfo);
+
+    // Advance to next frame index, loop at max
+    frameIndex++;
+    if( frameIndex == mMaxFramesInFlight ) frameIndex = 0;
   }
 }
 
@@ -544,7 +529,7 @@ void VulkanApp::cleanup() {
 
   mComputeDescriptorPool.reset();
 
-  mParticleVertexBuffers.clear();
+  //mParticleVertexBuffers.clear();
   mComputeDataBuffers.clear();
 
   mDeviceInstance.reset();

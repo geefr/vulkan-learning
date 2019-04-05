@@ -14,7 +14,7 @@ struct Particle {
   vec4 force;
   vec4 colour;
   float mass;
-  float pad1;
+  float radius;
   float pad2;
   float pad3;
 };
@@ -57,7 +57,6 @@ void main(){
 
   if( p.y < -100 ) {
     p.y = startPos.y;
-    //v *= vec4(-1,-1,-1,1);
     v = reflect(v * 0.9, vec4(0,1,0,0));
   }
   if( p.x < -100 ) {

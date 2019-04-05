@@ -22,7 +22,7 @@ public:
     glm::vec4 force = {0,0,0,1};
     glm::vec4 colour = {1,1,1,1};
     float mass = 1; // Kg
-    float pad1;
+    float radius = 1;
     float pad2;
     float pad3;
   };
