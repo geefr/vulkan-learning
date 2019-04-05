@@ -36,7 +36,7 @@ class VulkanApp
 {
 public:
   // TODO: Must be a multiple of 4, we don't validate buffer size before throwing at vulkan
-  VulkanApp() : mPhysics(1000000) {}
+  VulkanApp() : mPhysics(2500000) {}
   ~VulkanApp(){}
 
   void run() {

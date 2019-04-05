@@ -59,6 +59,7 @@ void main(){
     p.y = startPos.y;
     v = reflect(v * 0.9, vec4(0,1,0,0));
   }
+
   if( p.x < -100 ) {
     p.x = startPos.x;
     v = reflect(v * 0.9, vec4(1,0,0,0));
@@ -67,6 +68,7 @@ void main(){
     p.x = startPos.x;
     v = reflect(v * 0.9, vec4(-1,0,0,0));
   }
+
   if( p.z < -100 ) {
     p.z = startPos.z;
     v = reflect(v * 0.9, vec4(0,0,-1,0));

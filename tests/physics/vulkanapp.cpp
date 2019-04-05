@@ -19,10 +19,11 @@ void VulkanApp::initVK() {
   const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
   std::vector<const char*> requiredExtensions;
   for(uint32_t i = 0; i < glfwExtensionCount; ++i ) requiredExtensions.push_back(glfwExtensions[i]);
+  std::vector<const char*> enabledLayers = {};
 
   // One for rendering and one for computing
   std::vector<vk::QueueFlags> requiredQueues = { vk::QueueFlagBits::eGraphics, vk::QueueFlagBits::eCompute };
-  mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "Vulkan Test Application", 1, VK_API_VERSION_1_0, requiredQueues));
+  mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "Vulkan Test Application", 1, VK_API_VERSION_1_0, requiredQueues, enabledLayers));
 
   mGraphicsQueue = mDeviceInstance->getQueue(requiredQueues[0]);
   mComputeQueue = mDeviceInstance->getQueue(requiredQueues[1]);

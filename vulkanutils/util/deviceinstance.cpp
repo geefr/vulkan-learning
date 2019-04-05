@@ -8,8 +8,9 @@ DeviceInstance::DeviceInstance(
     const std::string& appName,
     uint32_t appVer,
     uint32_t vulkanApiVer,
-    std::vector<vk::QueueFlags> qFlags) {
-  createVulkanInstance(requiredInstanceExtensions, appName, appVer, vulkanApiVer);
+    std::vector<vk::QueueFlags> qFlags,
+    const std::vector<const char*>& enabledLayers) {
+  createVulkanInstance(requiredInstanceExtensions, appName, appVer, vulkanApiVer, enabledLayers);
   // TODO: Need to split device and queue creation apart
   createLogicalDevice(qFlags);
 }
@@ -21,7 +22,7 @@ DeviceInstance::~DeviceInstance() {
   mInstance.reset();
 }
 
-void DeviceInstance::createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer) {
+void DeviceInstance::createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer, const std::vector<const char*>& enabledLayers) {
   // First let's validate whether the extensions we need are available
   // If not there's no point doing anything and the system can't support the program
   // Assume that if presentation extensions are enabled at compile time then they're
@@ -48,24 +49,18 @@ void DeviceInstance::createVulkanInstance(const std::vector<const char*>& requir
       .setEngineVersion(1)
       .setApiVersion(apiVer);
 
+  auto instanceLayers = enabledLayers;
 #ifdef DEBUG
-  uint32_t enabledLayerCount = 1;
-  const char* const enabledLayerNames[] = {
-    "VK_LAYER_LUNARG_standard_validation",
-  };
+  instanceLayers.push_back("VK_LAYER_LUNARG_standard_validation");
   enabledInstanceExtensions.emplace_back("VK_EXT_debug_utils");
-
-#else
-  uint32_t enabledLayerCount = 0;
-  const char* const* enabledLayerNames = nullptr;
 #endif
-
+  auto numLayers = static_cast<uint32_t>(instanceLayers.size());
   for( auto& e : enabledInstanceExtensions ) Util::ensureExtension(supportedExtensions, e);
   auto instanceCreateInfo = vk::InstanceCreateInfo()
       .setFlags({})
       .setPApplicationInfo(&applicationInfo)
-      .setEnabledLayerCount(enabledLayerCount)
-      .setPpEnabledLayerNames(enabledLayerNames)
+      .setEnabledLayerCount(numLayers)
+      .setPpEnabledLayerNames(numLayers ? instanceLayers.data() : nullptr)
       .setEnabledExtensionCount(static_cast<uint32_t>(enabledInstanceExtensions.size()))
       .setPpEnabledExtensionNames(enabledInstanceExtensions.data());
 

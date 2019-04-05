@@ -38,7 +38,8 @@ public:
       const std::string& appName,
       uint32_t appVer,
       uint32_t vulkanApiVer,
-      std::vector<vk::QueueFlags> qFlags);
+      std::vector<vk::QueueFlags> qFlags,
+      const std::vector<const char*>& enabledLayers = {});
 
 
   vk::Instance& instance() { return mInstance.get(); }
@@ -75,7 +76,7 @@ public:
 
 
 private:
-  void createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer = VK_API_VERSION_1_0);
+  void createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer, const std::vector<const char*>& enabledLayers);
   void createLogicalDevice(std::vector<vk::QueueFlags> qFlags);
 
 
