@@ -1,3 +1,10 @@
+/*
+ * Provided under the BSD 3-Clause License, see LICENSE.
+ *
+ * Copyright (c) 2019, Gareth Francis
+ * All rights reserved.
+ */
+
 #ifndef FRAMEBUFFER_H
 #define FRAMEBUFFER_H
 

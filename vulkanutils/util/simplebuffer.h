@@ -1,3 +1,10 @@
+/*
+ * Provided under the BSD 3-Clause License, see LICENSE.
+ *
+ * Copyright (c) 2019, Gareth Francis
+ * All rights reserved.
+ */
+
 #ifndef SIMPLEBUFFER_H
 #define SIMPLEBUFFER_H
 
