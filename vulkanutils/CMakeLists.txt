@@ -3,7 +3,7 @@ set( targetName "vulkanutils" )
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR}
                      ${CMAKE_CURRENT_SOURCE_DIR}/util )
 
-add_library( vulkanutils ${VULKANUTILS_LIB_TYPE}
+add_library( vulkanutils ${LIB_TYPE}
   util/simplebuffer.h
   util/simplebuffer.cpp
   util/util.h

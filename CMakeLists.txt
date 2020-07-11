@@ -47,7 +47,19 @@ find_package(glm REQUIRED)
 # Set glm to be compatible with vulkan
 add_compile_definitions( GLM_DEPTH_ZERO_TO_ONE GLM_FORCE_LEFT_HANDED )
 
-set( VULKANUTILS_LIB_TYPE STATIC )
+set( LIB_TYPE STATIC )
+
+# _target - The target which requires this shader
+# _shadertarget - Name of the custom target for compiling the shader
+# _shaderFile - The shader file to compile
+function(compile_shader _target _shaderTarget _shaderFile)
+  get_filename_component( shaderFileBaseName ${_shaderFile} NAME )
+  add_custom_target( ${_shaderTarget}
+    COMMAND ${glslCompiler} -V ${_shaderFile} -o ${shaderFileBaseName}.spv
+    SOURCES ${_shaderFile} )
+  add_dependencies( ${_target} ${_shaderTarget} )
+endfunction()
 
 add_subdirectory( vulkanutils )
+add_subdirectory( renderer )
 add_subdirectory( tests )
