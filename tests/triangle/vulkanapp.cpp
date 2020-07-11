@@ -105,7 +105,7 @@ void VulkanApp::initVK() {
 void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer) {
 
   auto beginInfo = vk::CommandBufferBeginInfo()
-      .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution - TODO: Wat?
+      .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution
       .setPInheritanceInfo(nullptr)
       ;
   commandBuffer.begin(beginInfo);
