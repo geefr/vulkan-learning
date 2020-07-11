@@ -183,13 +183,19 @@ void Renderer::createVertexBuffers() {
   }
 }
 
-void Renderer::loop() {
+void Renderer::renderMesh( std::shared_ptr<Mesh> mesh, glm::mat4x4 mvp ) {
+	if( !mesh ) return;
+
+	std::cerr << "TODO: Renderer::renderMesh\n";
+}
+
+bool Renderer::frame() {
   auto frameIndex = 0u;
 
   std::once_flag windowShown;
   std::call_once(windowShown, [&win=mWindow](){glfwShowWindow(win);});
 
-  while(!glfwWindowShouldClose(mWindow)) {
+  if(glfwWindowShouldClose(mWindow)) return false;
 
     glfwPollEvents();
 
@@ -262,7 +268,8 @@ void Renderer::loop() {
     // TODO: Force-using a single queue for both graphics and present
     // Some systems may not be able to support this
     mQueue->queue.presentKHR(presentInfo);
-  }
+  
+    return true;
 }
 
 void Renderer::cleanup() {

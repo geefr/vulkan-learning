@@ -19,6 +19,8 @@
 # include <GLFW/glfw3.h>
 #endif
 
+#include <glm/glm.hpp>
+
 // https://github.com/KhronosGroup/Vulkan-Hpp
 # include <vulkan/vulkan.hpp>
 
@@ -40,27 +42,40 @@ public:
   Renderer(){}
   ~Renderer(){}
 
-  void run() {
-    initWindow();
-    initVK();
-    loop();
-    cleanup();
-  }
-
   struct VertexData
   {
     float vertCoord[3] = {0.f,0.f,0.f};
     float vertColour[4] = {0.f,0.f,0.f,0.f};
   };
 
-private:
+  // A mesh - A block of data to be rendered
+  struct Mesh {
+	Mesh(const std::vector<VertexData>& verts);
+
+	std::vector<VertexData> verts;
+	std::unique_ptr<SimpleBuffer> mVertexBuffer;
+	// TODO: Store command buffer on a per-mesh basis, or recreate each frame? What's faster?
+  };
+
+  /**
+   * Render a mesh (submit it to the render pipeline)
+   * Called by any mesh nodes in the node graph during the render traversal
+   */
+  void renderMesh( std::shared_ptr<Mesh>, glm::mat4x4 mvp );
+
   void initWindow();
   void initVK();
-  void createVertexBuffers();
-  void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer);
-  void loop();
+
+  /**
+   * Render a frame
+   * @return true if the engine should continue rendering, false if we should quit
+   */
+  bool frame();
   void cleanup();
 
+private:
+  void createVertexBuffers();
+  void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer);
   // The window itself
   GLFWwindow* mWindow = nullptr;
   int mWindowWidth = 800;

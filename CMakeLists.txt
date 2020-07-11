@@ -62,4 +62,6 @@ endfunction()
 
 add_subdirectory( vulkanutils )
 add_subdirectory( renderer )
+add_subdirectory( nodegraph )
+add_subdirectory( engine )
 add_subdirectory( tests )
