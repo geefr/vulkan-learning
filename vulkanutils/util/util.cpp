@@ -115,7 +115,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Util::debugCallback(
 #endif
 
 void Util::ensureExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName) {
-  if( std::find_if(extensions.begin(), extensions.end(), [&](auto& e) {return e.extensionName == extensionName;}) == extensions.end())
+  if( std::find_if(extensions.begin(), extensions.end(), [&](auto& e) {return extensionName == e.extensionName;}) == extensions.end())
     throw std::runtime_error("Extension not supported: " + extensionName);
 }
 

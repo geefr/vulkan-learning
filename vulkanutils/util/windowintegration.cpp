@@ -46,15 +46,18 @@ void WindowIntegration::createSwapChain(DeviceInstance::QueueRef& queue) {
   auto caps = mDeviceInstance.physicalDevice().getSurfaceCapabilitiesKHR(mSurface);
 
   // First the number of images (none, double, triple buffered)
-  auto numImages = 3u;
-  while( numImages > caps.maxImageCount ) numImages--;
-  if( numImages != 3u ) std::cerr << "Creating swapchain with " << numImages << " images" << std::endl;
-  if( numImages < caps.minImageCount ) throw std::runtime_error("Unable to create swapchain, invalid num images");
+  auto numImages = 3u; // We need 3
+  numImages = std::min(numImages, caps.minImageCount);
+  numImages = std::max(numImages, caps.maxImageCount);
+  if( numImages != 3u ) {
+    throw std::runtime_error("Unable to create swap chain with 3 images, hardware supports between " + std::to_string(caps.minImageCount) +
+    " and " + std::to_string(caps.maxImageCount));
+  }
 
   // Ideally we want full alpha support
   auto alphaMode = vk::CompositeAlphaFlagBitsKHR::ePreMultiplied; // TODO: Pre or post? can't remember the difference
   if( !(caps.supportedCompositeAlpha & alphaMode) ) {
-    std::cerr << "Surface doesn't support full alpha, falling back" << std::endl;
+    std::cerr << "Surface doesn't support full alpha, falling back to opaque" << std::endl;
     alphaMode = vk::CompositeAlphaFlagBitsKHR::eOpaque;
   }
 
