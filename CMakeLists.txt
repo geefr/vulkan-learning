@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.16)
 
 project(vulkan-stuff)
 
@@ -32,9 +32,12 @@ endif()
 find_package(Vulkan REQUIRED)
 
 # This is a little ugly but will work
-set( glslCompiler "${Vulkan_INCLUDE_DIR}/../bin/glslangValidator")
+set( glslCompiler "$ENV{VULKAN_SDK}/bin/glslangValidator")
 if(NOT EXISTS "${glslCompiler}")
-  message( FATAL_ERORR "Unable to locate 'glslValidator'. Please install glsl-tools or provide a Vulkan SDK which includes this tool")
+  set( glslCompiler "${Vulkan_INCLUDE_DIR}/../bin/glslangValidator")
+endif()
+if(NOT EXISTS "${glslCompiler}")
+	message( FATAL_ERROR "Unable to locate 'glslValidator'. Please install glsl-tools or provide a Vulkan SDK which includes this tool")
 endif()
 
 find_package(glfw3 REQUIRED)
