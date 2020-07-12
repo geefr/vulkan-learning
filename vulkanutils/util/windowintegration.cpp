@@ -47,8 +47,8 @@ void WindowIntegration::createSwapChain(DeviceInstance::QueueRef& queue) {
 
   // First the number of images (none, double, triple buffered)
   auto numImages = 3u; // We need 3
-  numImages = std::max(numImages, caps.minImageCount);
-  numImages = std::min(numImages, caps.maxImageCount);
+  if( caps.minImageCount != 0 ) numImages = std::max(numImages, caps.minImageCount);
+  if( caps.maxImageCount != 0 ) numImages = std::min(numImages, caps.maxImageCount);
   if( numImages != 3u ) {
     throw std::runtime_error("Unable to create swap chain with 3 images, hardware supports between " + std::to_string(caps.minImageCount) +
     " and " + std::to_string(caps.maxImageCount));
