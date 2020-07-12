@@ -10,8 +10,9 @@
 #include "node.h"
 
 Engine::Engine()
-	: mRend(new Renderer())
+	: mRend(new Renderer(*this))
 	, mNodeGraph(new Node())
+	, mQuit(false)
 {}
 
 Engine::~Engine() {}
@@ -38,12 +39,19 @@ void Engine::loop() {
 		// Poll for events
 		// TODO: Just handling the window here - should poll any
 		// other input devices/systems like joysticks, VR controllers, etc
-		if( !mRend->pollWindowEvents() ) break;
+		mEventQueue.clear();
+		// Renderer can request a quit here - TODO: Should really handle as a QuitEvent instance
+	        if( !mRend->pollWindowEvents() ) break;
+		// Handle explicit event callbacks (Not bound to any particular node/script)
+		callEventCallbacks();
+
+		// Renderer or other events may have asked us to stop rendering
+		if( mQuit ) break;
 
 		// Start the frame (Let the renderer reset what it needs)
 		mRend->frameStart();
 
-		// TODO: Update time delta
+		// TODO: Update time delta - Should do this at the start of the loop, have the time available for any global event callbacks?
 		mNodeGraph->update(0);
 
 		// TODO: Proper values for matrices - Need to add cameras
@@ -62,4 +70,24 @@ void Engine::cleanup() {
 	mNodeGraph->cleanup(*mRend.get());
 	mRend->cleanup();
 }
+
+void Engine::addEvent(std::shared_ptr<Event> e) { mEventQueue.emplace_back(e); }
+void Engine::addEvent(Event* e) { mEventQueue.emplace_back(e); }
+
+void Engine::addGlobalEventCallback(Engine::GlobalEventCallback callback) {
+	mGlobalEventCallbacks.emplace_back(callback);
+}
+
+void Engine::callEventCallbacks() {
+	for( auto& e : mEventQueue ) {
+		for( auto& c : mGlobalEventCallbacks ) {
+			c(*this, *e.get());
+		}
+	}
+}
+
+const std::list<std::shared_ptr<Event>>& Engine::events() const { return mEventQueue; }
+
+void Engine::quit() { mQuit = true; }
+
 

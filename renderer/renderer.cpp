@@ -1,5 +1,17 @@
 #include "renderer.h"
+#include "engine.h"
+
 #include <mutex>
+#include <functional>
+
+using namespace std::placeholders;
+
+Renderer::Renderer(Engine& engine)
+	: mEngine(engine) {}
+
+Renderer::~Renderer() {
+	cleanup();
+}
 
 void Renderer::initWindow() {
 	glfwInit();
@@ -7,6 +19,22 @@ void Renderer::initWindow() {
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 	mWindow = glfwCreateWindow(mWindowWidth, mWindowHeight, "Vulkan Experiment", nullptr, nullptr);
+
+
+	// Initialise event handlers
+	glfwSetWindowUserPointer(mWindow, this);
+	glfwSetKeyCallback(mWindow, [](GLFWwindow* win, int key, int scancode, int action, int mods) {
+		static_cast<Renderer*>(glfwGetWindowUserPointer(win))->onGLFWKeyEvent(key, scancode, action, mods);
+	});
+
+}
+
+void Renderer::onGLFWKeyEvent(int key, int scancode, int action, int mods) {
+	if( action == GLFW_PRESS ) {
+		mEngine.addEvent(new KeyPressEvent(key));
+	} else if( action == GLFW_RELEASE ) {
+		mEngine.addEvent(new KeyReleaseEvent(key));
+	}
 }
 
 void Renderer::initVK() {
@@ -147,12 +175,12 @@ void Renderer::renderMesh( std::shared_ptr<Mesh> mesh, glm::mat4x4 mvp ) {
 }
 
 bool Renderer::pollWindowEvents() {
-  if(glfwWindowShouldClose(mWindow)) {
-	  return false;
-  }
+  // Poll the events, will be handled by the GLFW callbacks
+  // and passed to the mEngine's event queue
   glfwPollEvents();
 
-  // TODO: For each window event push an event to the engine's event queue
+  // A special case, report to the Engine that we need to close
+  if(glfwWindowShouldClose(mWindow)) return false;
 
   return true;
 }
@@ -168,7 +196,7 @@ void Renderer::frameStart() {
 void Renderer::frameEnd() {
   auto frameIndex = 0u;
 
-  std::once_flag windowShown;
+  static std::once_flag windowShown;
   std::call_once(windowShown, [&win=mWindow](){glfwShowWindow(win);});
 
     // Wait for the last frame to finish rendering
@@ -251,7 +279,11 @@ void Renderer::cleanup() {
 	// Ensure they are shut down before terminating glfw
 	// TODO: Could wrap the glfw stuff in a smart pointer and
 	// remove the need for this method
-
+	
+	if( !mDeviceInstance ) {
+		// Already cleaned up, or otherwise invalid
+		return;
+	}
 	mDeviceInstance->waitAllDevicesIdle();
 
 	mFrameInFlightFences.clear();

@@ -8,7 +8,12 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 
+#include "event.h"
+
+#include <atomic>
 #include <memory>
+#include <list>
+#include <set>
 
 class Node;
 class Renderer;
@@ -16,6 +21,8 @@ class Renderer;
 class Engine
 {
 public:
+  using GlobalEventCallback = std::function<void(Engine&, Event&)>;
+
   Engine();
   ~Engine();
 
@@ -32,6 +39,19 @@ public:
    */
   std::shared_ptr<Node> nodegraph();
 
+  void addEvent(std::shared_ptr<Event> e);
+  void addEvent(Event* e);
+  void callEventCallbacks();
+
+  void addGlobalEventCallback(GlobalEventCallback callback);
+
+  const std::list<std::shared_ptr<Event>>& events() const;
+
+  /**
+   * Call to quit the rendering loop, shutdown the engine/renderer
+   */
+  void quit();
+
 private:
   void initRenderer();
   void loop();
@@ -39,6 +59,11 @@ private:
 
   std::unique_ptr<Renderer> mRend;
   std::shared_ptr<Node> mNodeGraph;
+
+  std::list<std::shared_ptr<Event>> mEventQueue;
+  std::list<GlobalEventCallback> mGlobalEventCallbacks;
+
+  std::atomic<bool> mQuit;
 };
 
 #endif

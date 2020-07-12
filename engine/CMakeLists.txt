@@ -9,6 +9,8 @@ include_directories(
 add_library( ${targetName} ${LIB_TYPE}
 	engine.h
 	engine.cpp
+	event.h
+	event.cpp
 )
 target_link_libraries( ${targetName} renderer nodegraph )
 

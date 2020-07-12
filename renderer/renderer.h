@@ -37,11 +37,13 @@ class GraphicsPipeline;
 class DeviceInstance;
 class WindowIntegration;
 
+class Engine;
+
 class Renderer
 {
 public:
-  Renderer(){}
-  ~Renderer(){}
+  Renderer( Engine& engine );
+  ~Renderer();
 
   struct VertexData
   {
@@ -80,7 +82,7 @@ public:
 
   /**
    * Poll events from the window
-   * @return true if the engine should continue rendering, false if it should quit
+   * @return false to quit, true otherwise
    */
   bool pollWindowEvents();
 
@@ -92,8 +94,14 @@ public:
   void waitIdle();
   void cleanup();
 
+  void onGLFWKeyEvent(int key, int scancode, int action, int mods);
+
 private:
   void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer);
+
+  // Reference to the Engine, used to pass back window events/other renderer specific actions
+  Engine& mEngine;
+
   // The window itself
   GLFWwindow* mWindow = nullptr;
   int mWindowWidth = 800;

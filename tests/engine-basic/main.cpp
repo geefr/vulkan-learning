@@ -11,7 +11,15 @@ int main(int argc, char* argv[])
   try {
     Engine eng;
 
-	eng.nodegraph()->children().emplace_back(new MeshNode());
+    // Setup global actions
+    eng.addGlobalEventCallback([](Engine& engine, Event& e) {
+      if( auto keypress = dynamic_cast<KeyPressEvent*>(&e) ) {
+        if( keypress->mKey == 256 ) engine.quit();
+      }
+    });
+
+    // Load some data into the scene
+    eng.nodegraph()->children().emplace_back(new MeshNode());
 
     eng.run();
   } catch ( std::exception& e) {

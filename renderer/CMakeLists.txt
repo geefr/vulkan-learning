@@ -1,6 +1,9 @@
 set( targetName "renderer" )
 
-include_directories(${PROJECT_SOURCE_DIR}/vulkanutils)
+include_directories(
+	${PROJECT_SOURCE_DIR}/vulkanutils
+	${PROJECT_SOURCE_DIR}/engine
+)
 
 add_definitions( "-DRENDERER_SHADER_ROOT=\"${CMAKE_CURRENT_BINARY_DIR}\"" )
 
