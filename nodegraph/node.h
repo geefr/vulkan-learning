@@ -1,10 +1,6 @@
 #ifndef NODE_H
 #define NODE_H
 
-// TODO: Should really just include an abstract Renderer here, to allow
-// re-use of nodes in other projects
-#include "renderer.h"
-
 #include <memory>
 #include <vector>
 
@@ -12,6 +8,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 using namespace glm;
+
+class Renderer;
 
 /**
  * Node within the scene graph
@@ -62,11 +60,11 @@ class Node
 	// Initialise this node and any children
 	// All one-time initialisation should be put here
 	// so stuff like buffer generation, fetching uniform IDs etc
-	void init();
+	void init(Renderer& rend);
 	// Upload this node and any children to the GPU
 	// It should be possible to call this multiple times
 	// to allow buffer contents/textures etc to change
-	void upload();
+	void upload(Renderer& rend);
 	// Render this node and any children
 	void render(Renderer& rend, mat4x4 viewMat, mat4x4 projMat);
 	void render(Renderer& rend, mat4x4 nodeMat, mat4x4 viewMat, mat4x4 projMat);
@@ -78,6 +76,10 @@ class Node
 	/// Disabled nodes won't be updated or rendered
 	bool& enabled();
 
+	/// Perform cleanup actions for this node and all children
+	/// Including but not limited to freeing GPU resources
+	void cleanup(Renderer& rend);
+
 	protected:
 	// Children need to implement these
 	// Will be called by the public versions of these
@@ -85,10 +87,11 @@ class Node
 	// Child classes do not need to worry about their
 	// respective sub-nodes, just anything they've added
 	// as part of the child class ;)
-	virtual void doInit();
-	virtual void doUpload();
+	virtual void doInit(Renderer& rend);
+	virtual void doUpload(Renderer& rend);
 	virtual void doRender(Renderer& rend, mat4x4 nodeMat, mat4x4 viewMat, mat4x4 projMat);
 	virtual void doUpdate(double deltaT);
+	virtual void doCleanup(Renderer& rend);
 
 	private:
 	vec3 mScale = vec3(1.0);

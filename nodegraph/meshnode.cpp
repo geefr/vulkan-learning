@@ -8,20 +8,27 @@ MeshNode::MeshNode()
 {
 }
 
-MeshNode::MeshNode(const std::vector<Renderer::VertexData>& meshData) {
-	mMesh.reset(new Renderer::Mesh(meshData));
-}
-
 MeshNode::~MeshNode()
 {
 }
 
-void MeshNode::doInit()
+void MeshNode::doInit(Renderer& rend)
 {
+	std::vector<Renderer::VertexData> vertData = {
+		{{-.5,-.5,0},{1,0,0,1}},
+		{{-.5,.5,0},{0,1,0,1}},
+		{{ .5,-.5,0},{0,0,1,1}},
+
+		{{ .5,-.5,0},{0,0,1,1}},
+		{{-.5,.5,0},{0,1,0,1}},
+		{{.5,.5,0},{1,0,1,.5}},
+	};
+	mMesh.reset(new Renderer::Mesh(vertData));
 }
 
-void MeshNode::doUpload()
+void MeshNode::doUpload(Renderer& rend)
 {
+	if( mMesh ) mMesh->upload(rend);
 }
 
 void MeshNode::doRender(Renderer& rend, mat4x4 nodeMat, mat4x4 viewMat, mat4x4 projMat)
@@ -32,4 +39,8 @@ void MeshNode::doRender(Renderer& rend, mat4x4 nodeMat, mat4x4 viewMat, mat4x4 p
 	mvp *= projMat;
 
 	rend.renderMesh(mMesh, mvp);
+}
+
+void MeshNode::doCleanup(Renderer& rend) {
+  if( mMesh ) mMesh->cleanup(rend);
 }

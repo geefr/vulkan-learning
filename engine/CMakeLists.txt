@@ -10,5 +10,5 @@ add_library( ${targetName} ${LIB_TYPE}
 	engine.h
 	engine.cpp
 )
-target_link_libraries( ${targetName} renderer )
+target_link_libraries( ${targetName} renderer nodegraph )
 

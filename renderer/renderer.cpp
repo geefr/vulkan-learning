@@ -2,97 +2,93 @@
 #include <mutex>
 
 void Renderer::initWindow() {
-  glfwInit();
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-  mWindow = glfwCreateWindow(mWindowWidth, mWindowHeight, "Vulkan Experiment", nullptr, nullptr);
+	glfwInit();
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+	mWindow = glfwCreateWindow(mWindowWidth, mWindowHeight, "Vulkan Experiment", nullptr, nullptr);
 }
 
 void Renderer::initVK() {
-  // Initialise the vulkan instance
-  // GLFW can give us what extensions it requires, nice
-  uint32_t glfwExtensionCount = 0;
-  const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-  std::vector<const char*> requiredExtensions;
-  for(uint32_t i = 0; i < glfwExtensionCount; ++i ) requiredExtensions.push_back(glfwExtensions[i]);
-  // Just the one queue here for drawing our triangle
-  std::vector<vk::QueueFlags> requiredQueues = { vk::QueueFlagBits::eGraphics };
-  mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "Vulkan Test Application", 1, VK_API_VERSION_1_0, requiredQueues));
-  mQueue = mDeviceInstance->getQueue(requiredQueues[0]);
-  if( !mQueue ) throw std::runtime_error("Failed to get graphics queue from device");
+	// Initialise the vulkan instance
+	// GLFW can give us what extensions it requires, nice
+	uint32_t glfwExtensionCount = 0;
+	const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+	std::vector<const char*> requiredExtensions;
+	for(uint32_t i = 0; i < glfwExtensionCount; ++i ) requiredExtensions.push_back(glfwExtensions[i]);
+	// Just the one queue here for drawing our triangle
+	std::vector<vk::QueueFlags> requiredQueues = { vk::QueueFlagBits::eGraphics };
+	mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "Vulkan Test Application", 1, VK_API_VERSION_1_0, requiredQueues));
+	mQueue = mDeviceInstance->getQueue(requiredQueues[0]);
+	if( !mQueue ) throw std::runtime_error("Failed to get graphics queue from device");
 
-  // Find out what queues are available
-  //auto queueFamilyProps = dev.getQueueFamilyProperties();
-  //printQueueFamilyProperties(queueFamilyProps);
+	// Find out what queues are available
+	//auto queueFamilyProps = dev.getQueueFamilyProperties();
+	//printQueueFamilyProperties(queueFamilyProps);
 
-  // Create a logical device to interact with
-  // To do this we also need to specify how many queues from which families we want to create
-  // In this case just 1 queue from the first family which supports graphics
+	// Create a logical device to interact with
+	// To do this we also need to specify how many queues from which families we want to create
+	// In this case just 1 queue from the first family which supports graphics
 
-  mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mQueue));
+	mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mQueue));
 
-  mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get()));
+	mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get()));
 
-  // Build the graphics pipeline
-  // In this case we can throw away the shader modules after building as they're only used by the one pipeline
-  {
-    mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eVertex] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/flatshading.vert.spv");
-    mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eFragment] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/flatshading.frag.spv");
+	// Build the graphics pipeline
+	// In this case we can throw away the shader modules after building as they're only used by the one pipeline
+	{
+		mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eVertex] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/flatshading.vert.spv");
+		mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eFragment] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/flatshading.frag.spv");
 
-    // The layout of our vertex buffers
-    auto vertBufferBinding = vk::VertexInputBindingDescription()
-        .setBinding(0)
-        .setStride(sizeof(VertexData))
-        .setInputRate(vk::VertexInputRate::eVertex);
-    mGraphicsPipeline->vertexInputBindings().emplace_back(vertBufferBinding);
+		// The layout of our vertex buffers
+		auto vertBufferBinding = vk::VertexInputBindingDescription()
+			.setBinding(0)
+			.setStride(sizeof(VertexData))
+			.setInputRate(vk::VertexInputRate::eVertex);
+		mGraphicsPipeline->vertexInputBindings().emplace_back(vertBufferBinding);
 
-    // Location, Binding, Format, Offset
-    mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(VertexData, vertCoord));
-    mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(VertexData, vertColour));
+		// Location, Binding, Format, Offset
+		mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(VertexData, vertCoord));
+		mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(VertexData, vertColour));
+		mGraphicsPipeline->build();
+	}
 
-    // Create and upload vertex buffers
-    createVertexBuffers();
+	mFrameBuffer.reset(new FrameBuffer(mDeviceInstance->device(), *mWindowIntegration.get(), mGraphicsPipeline->renderPass()));
 
-    mGraphicsPipeline->build();
-  }
+	// Setup our sync primitives
+	// imageAvailable - gpu: Used to stall the pipeline until the presentation has finished reading from the image
+	// renderFinished - gpu: Used to stall presentation until the pipeline is finished
+	// frameInFlightFence - cpu: Used to ensure we don't schedule a second frame for each image until the last is complete
 
-  mFrameBuffer.reset(new FrameBuffer(mDeviceInstance->device(), *mWindowIntegration.get(), mGraphicsPipeline->renderPass()));
+	// Create the semaphores we're gonna use
+	mMaxFramesInFlight = mWindowIntegration->swapChainImages().size();
+	for( auto i = 0u; i < mMaxFramesInFlight; ++i ) {
+		mImageAvailableSemaphores.emplace_back( mDeviceInstance->device().createSemaphoreUnique({}));
+		mRenderFinishedSemaphores.emplace_back( mDeviceInstance->device().createSemaphoreUnique({}));
+		// Create fence in signalled state so first wait immediately returns and resets fence
+		mFrameInFlightFences.emplace_back( mDeviceInstance->device().createFenceUnique({vk::FenceCreateFlagBits::eSignaled}));
+	}
 
-  // Setup our sync primitives
-  // imageAvailable - gpu: Used to stall the pipeline until the presentation has finished reading from the image
-  // renderFinished - gpu: Used to stall presentation until the pipeline is finished
-  // frameInFlightFence - cpu: Used to ensure we don't schedule a second frame for each image until the last is complete
+	// TODO: Misfit
+	mCommandPool = mDeviceInstance->createCommandPool( { vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+			/* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
+			   vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
+			   */
+			}, *mQueue);
 
-  // Create the semaphores we're gonna use
-  mMaxFramesInFlight = mWindowIntegration->swapChainImages().size();
-  for( auto i = 0u; i < mMaxFramesInFlight; ++i ) {
-    mImageAvailableSemaphores.emplace_back( mDeviceInstance->device().createSemaphoreUnique({}));
-    mRenderFinishedSemaphores.emplace_back( mDeviceInstance->device().createSemaphoreUnique({}));
-    // Create fence in signalled state so first wait immediately returns and resets fence
-    mFrameInFlightFences.emplace_back( mDeviceInstance->device().createFenceUnique({vk::FenceCreateFlagBits::eSignaled}));
-  }
+	// Now make a command buffer for each framebuffer
+	auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo()
+		.setCommandPool(mCommandPool.get())
+		.setCommandBufferCount(static_cast<uint32_t>(mWindowIntegration->swapChainImages().size()))
+		.setLevel(vk::CommandBufferLevel::ePrimary)
+		;
 
-  // TODO: Misfit
-  mCommandPool = mDeviceInstance->createCommandPool( { vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-                                                       /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
-                                                          vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
-                                                                                                                                              */
-                                                     }, *mQueue);
+	mCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
 
-  // Now make a command buffer for each framebuffer
-  auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo()
-      .setCommandPool(mCommandPool.get())
-      .setCommandBufferCount(static_cast<uint32_t>(mWindowIntegration->swapChainImages().size()))
-      .setLevel(vk::CommandBufferLevel::ePrimary)
-      ;
-
-  mCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
-
-  for( auto i = 0u; i < mCommandBuffers.size(); ++i ) {
-    auto commandBuffer = mCommandBuffers[i].get();
-    buildCommandBuffer(commandBuffer, mFrameBuffer->frameBuffers()[i].get());
-  }
+//	for( auto i = 0u; i < mCommandBuffers.size(); ++i ) {
+//		auto commandBuffer = mCommandBuffers[i].get();
+//		buildCommandBuffer(commandBuffer, mFrameBuffer->frameBuffers()[i].get());
+//	}
 }
 
 void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer) {
@@ -123,16 +119,18 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   // Now it's time to finally draw our one crappy little triangle >.<
   commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->pipeline());
 
-  auto& vertBuf = mVertexBuffers[mGeomName];
-  //auto& vertBuf = mVertexBuffers["rectangle"];
-  vk::Buffer buffers[] = { vertBuf->buffer() };
-  vk::DeviceSize offsets[] = { 0 };
-  commandBuffer.bindVertexBuffers(0, 1, buffers, offsets);
-  commandBuffer.draw(static_cast<uint32_t>(vertBuf->size() / sizeof(VertexData)), // Draw n vertices
-                     1, // Used for instanced rendering, 1 otherwise
-                     0, // First vertex
-                     0  // First instance
-                     );
+  for( auto& mesh : mFrameMeshesToRender ) {
+    auto& vertBuf = mesh->mVertexBuffer;
+    // TODO: Probably not efficient - Could batch multiple buffers/offsets here
+    vk::Buffer buffers[] = { vertBuf->buffer() };
+    vk::DeviceSize offsets[] = { 0 };
+    commandBuffer.bindVertexBuffers(0, 1, buffers, offsets);
+    commandBuffer.draw(static_cast<uint32_t>(vertBuf->size() / sizeof(VertexData)), // Draw n vertices
+                       1, // Used for instanced rendering, 1 otherwise
+                       0, // First vertex
+                       0  // First instance
+                       );
+  }
 
   // End the render pass
   commandBuffer.endRenderPass();
@@ -141,63 +139,37 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   commandBuffer.end();
 }
 
-void Renderer::createVertexBuffers() {
-  // A pretty triangle
-  {
-    VertexData vertData[] = {
-      {{0,-.5,0},{1,0,0,1}},
-      {{-.5,.5,0},{0,1,0,1}},
-      {{.5,.5,0},{0,0,1,1}},
-    };
-    mVertexBuffers["triangle"].reset( new SimpleBuffer(
-                                        *mDeviceInstance.get(),
-                                        sizeof(vertData),
-                                        vk::BufferUsageFlagBits::eVertexBuffer) );
-    auto& vertBuffer = mVertexBuffers["triangle"];
-
-    std::memcpy(vertBuffer->map(), vertData, sizeof(vertData));
-    vertBuffer->flush();
-    vertBuffer->unmap();
-  }
-
-  // A pretty quad
-  {
-    VertexData vertData[] = {
-      {{-.5,-.5,0},{1,0,0,1}},
-      {{-.5,.5,0},{0,1,0,1}},
-      {{ .5,-.5,0},{0,0,1,1}},
-
-      {{ .5,-.5,0},{0,0,1,1}},
-      {{-.5,.5,0},{0,1,0,1}},
-      {{.5,.5,0},{1,0,1,.5}},
-    };
-    mVertexBuffers["rectangle"].reset( new SimpleBuffer(
-                                        *mDeviceInstance.get(),
-                                        sizeof(vertData),
-                                        vk::BufferUsageFlagBits::eVertexBuffer) );
-    auto& vertBuffer = mVertexBuffers["rectangle"];
-
-    std::memcpy(vertBuffer->map(), vertData, sizeof(vertData));
-    vertBuffer->flush();
-    vertBuffer->unmap();
-  }
-}
-
 void Renderer::renderMesh( std::shared_ptr<Mesh> mesh, glm::mat4x4 mvp ) {
 	if( !mesh ) return;
-
-	std::cerr << "TODO: Renderer::renderMesh\n";
+	// Note that we need to render the mesh, frameEnd will
+	// submit this to the gpu as needed
+	mFrameMeshesToRender.emplace_back(mesh);
 }
 
-bool Renderer::frame() {
+bool Renderer::pollWindowEvents() {
+  if(glfwWindowShouldClose(mWindow)) {
+	  return false;
+  }
+  glfwPollEvents();
+
+  // TODO: For each window event push an event to the engine's event queue
+
+  return true;
+}
+
+void Renderer::frameStart() {
+	// Reset any per-frame data
+	mFrameMeshesToRender.clear();
+
+	// Engine will now do its thing, we'll get calls to various
+	// render methods here, then frameEnd to commit the frame
+}
+
+void Renderer::frameEnd() {
   auto frameIndex = 0u;
 
   std::once_flag windowShown;
   std::call_once(windowShown, [&win=mWindow](){glfwShowWindow(win);});
-
-  if(glfwWindowShouldClose(mWindow)) return false;
-
-    glfwPollEvents();
 
     // Wait for the last frame to finish rendering
     mDeviceInstance->device().waitForFences(1, &mFrameInFlightFences[frameIndex].get(), true, std::numeric_limits<uint64_t>::max());
@@ -265,34 +237,59 @@ bool Renderer::frame() {
         .setPResults(nullptr)
         ;
 
-    // TODO: Force-using a single queue for both graphics and present
+    // TODO: Currently using a single queue for both graphics and present
     // Some systems may not be able to support this
     mQueue->queue.presentKHR(presentInfo);
-  
-    return true;
+}
+
+void Renderer::waitIdle() {
+	mDeviceInstance->waitAllDevicesIdle();
 }
 
 void Renderer::cleanup() {
-  // Explicitly cleanup the vulkan objects here
-  // Ensure they are shut down before terminating glfw
-  // TODO: Could wrap the glfw stuff in a smart pointer and
-  // remove the need for this method
+	// Explicitly cleanup the vulkan objects here
+	// Ensure they are shut down before terminating glfw
+	// TODO: Could wrap the glfw stuff in a smart pointer and
+	// remove the need for this method
 
-  mDeviceInstance->waitAllDevicesIdle();
+	mDeviceInstance->waitAllDevicesIdle();
 
-  mFrameInFlightFences.clear();
-  mRenderFinishedSemaphores.clear();
-  mImageAvailableSemaphores.clear();
-  mCommandBuffers.clear();
-  mCommandPool.reset();
-  mGraphicsPipeline.reset();
-  mFrameBuffer.reset();
-  mWindowIntegration.reset();
+	mFrameInFlightFences.clear();
+	mRenderFinishedSemaphores.clear();
+	mImageAvailableSemaphores.clear();
+	mCommandBuffers.clear();
+	mCommandPool.reset();
+	mGraphicsPipeline.reset();
+	mFrameBuffer.reset();
+	mWindowIntegration.reset();
 
-  mVertexBuffers.clear();
+	mDeviceInstance.reset();
 
-  mDeviceInstance.reset();
-
-  glfwDestroyWindow(mWindow);
-  glfwTerminate();
+	glfwDestroyWindow(mWindow);
+	glfwTerminate();
 }
+
+
+std::unique_ptr<SimpleBuffer> Renderer::createSimpleVertexBuffer(std::vector<VertexData> verts) {
+	std::unique_ptr<SimpleBuffer> result( new SimpleBuffer(
+				*mDeviceInstance.get(),
+				verts.size() * sizeof(decltype(verts)::value_type),
+				vk::BufferUsageFlagBits::eVertexBuffer) );
+	return result;
+}
+
+Renderer::Mesh::Mesh(const std::vector<VertexData>& v)
+	: verts(v)
+{}
+
+void Renderer::Mesh::upload(Renderer& rend) {
+	mVertexBuffer = rend.createSimpleVertexBuffer(verts);
+	std::memcpy(mVertexBuffer->map(), verts.data(), verts.size() * sizeof(decltype(verts)::value_type));
+	mVertexBuffer->flush();
+	mVertexBuffer->unmap();
+}
+
+void Renderer::Mesh::cleanup(Renderer& rend) {
+  mVertexBuffer.reset();
+}
+

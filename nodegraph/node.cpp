@@ -1,4 +1,5 @@
 #include "node.h"
+#include "renderer.h"
 
     Node::Node()
     {
@@ -50,16 +51,16 @@
         return vec4(v, 1.0f) * m;
     }
 
-    void Node::init()
+    void Node::init(Renderer& rend)
     {
-        doInit();
-        for( auto& c: mChildren ) c->init();
+        doInit(rend);
+        for( auto& c: mChildren ) c->init(rend);
     }
 
-    void Node::upload()
+    void Node::upload(Renderer& rend)
     {
-        doUpload();
-        for( auto& c: mChildren ) c->upload();
+        doUpload(rend);
+        for( auto& c: mChildren ) c->upload(rend);
     }
 
     void Node::render(Renderer& rend, mat4x4 viewMat, mat4x4 projMat)
@@ -89,6 +90,11 @@
       for( auto& c : mChildren ) c->update(deltaT);
     }
 
+    void Node::cleanup(Renderer& rend) {
+	doCleanup(rend);
+	for( auto& c : mChildren) c->cleanup(rend);
+    }
+
     void Node::doUpdate(double deltaT)
     {
       // Update if our transform is changing over time for some reason
@@ -97,9 +103,10 @@
       mScale += mScaleDelta * (float)deltaT;
     }
 
-    void Node::doInit() {}
-    void Node::doUpload() {}
+    void Node::doInit(Renderer& rend) {}
+    void Node::doUpload(Renderer& rend) {}
     void Node::doRender(Renderer& rend, mat4x4 nodeMat, mat4x4 viewMat, mat4x4 projMat) {}
+    void Node::doCleanup(Renderer& rend) {}
 
     bool& Node::enabled() { return mEnabled; }
 

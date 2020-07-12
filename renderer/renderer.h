@@ -27,6 +27,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <vector>
+#include <list>
 #include <map>
 #include <string>
 
@@ -50,12 +51,23 @@ public:
 
   // A mesh - A block of data to be rendered
   struct Mesh {
-	Mesh(const std::vector<VertexData>& verts);
+	Mesh(const std::vector<VertexData>& v);
+
+	/// Create buffers and upload data to the GPU
+	void upload(Renderer& rend);
+	/// Delete buffers
+	void cleanup(Renderer& rend);
 
 	std::vector<VertexData> verts;
 	std::unique_ptr<SimpleBuffer> mVertexBuffer;
 	// TODO: Store command buffer on a per-mesh basis, or recreate each frame? What's faster?
+	// TODO: Currently making a separate buffer for each mesh, should have a batched version/auto-batch things
   };
+
+  /**
+   * Create a vertex buffer and upload data to the GPU
+   */
+  std::unique_ptr<SimpleBuffer> createSimpleVertexBuffer(std::vector<VertexData> verts);
 
   /**
    * Render a mesh (submit it to the render pipeline)
@@ -67,23 +79,25 @@ public:
   void initVK();
 
   /**
-   * Render a frame
-   * @return true if the engine should continue rendering, false if we should quit
+   * Poll events from the window
+   * @return true if the engine should continue rendering, false if it should quit
    */
-  bool frame();
+  bool pollWindowEvents();
+
+  /**
+   * Render a frame
+   */
+  void frameStart();
+  void frameEnd();
+  void waitIdle();
   void cleanup();
 
 private:
-  void createVertexBuffers();
   void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer);
   // The window itself
   GLFWwindow* mWindow = nullptr;
   int mWindowWidth = 800;
   int mWindowHeight = 600;
-
-  std::string mGeomName = "triangle";
-
-  std::map<std::string, std::unique_ptr<SimpleBuffer>> mVertexBuffers;
 
   // Our classyboys to obfuscate the verbosity of vulkan somewhat
   // Remember deletion order matters
@@ -101,6 +115,9 @@ private:
   std::vector<vk::UniqueSemaphore> mImageAvailableSemaphores;
   std::vector<vk::UniqueSemaphore> mRenderFinishedSemaphores;
   std::vector<vk::UniqueFence> mFrameInFlightFences;
+
+  // Members used to track data during a frame/nodegraph traversal
+  std::list<std::shared_ptr<Mesh>> mFrameMeshesToRender;
 };
 
 #endif
