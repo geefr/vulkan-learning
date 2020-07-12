@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <vector>
+#include <functional>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -10,6 +11,7 @@
 using namespace glm;
 
 class Renderer;
+class Engine;
 
 /**
  * Node within the scene graph
@@ -22,7 +24,10 @@ class Node
 {
 	using Child = std::shared_ptr<Node>;
 	using Children = std::vector<Child>;
-	public:
+
+	using UpdateScript = std::function<void(Engine&, Node&, double deltaT)>;
+
+public:
 	Node();
 	virtual ~Node();
 
@@ -69,8 +74,13 @@ class Node
 	void render(Renderer& rend, mat4x4 viewMat, mat4x4 projMat);
 	void render(Renderer& rend, mat4x4 nodeMat, mat4x4 viewMat, mat4x4 projMat);
 
-	// Update this node and any children
-	void update(double deltaT);
+	/// Update this node and any children
+	void update(Engine& eng, double deltaT);
+	/** 
+	 * Assign a script/update function to the node, will be called before
+	 * the call to doUpdate (Before any node-specific updates)
+	 */
+	void updateScript(UpdateScript s);
 
 	/// Enable/Disable the node
 	/// Disabled nodes won't be updated or rendered
@@ -93,7 +103,7 @@ class Node
 	virtual void doUpdate(double deltaT);
 	virtual void doCleanup(Renderer& rend);
 
-	private:
+private:
 	vec3 mScale = vec3(1.0);
 	vec3 mRot = vec3(0.0);
 	vec3 mTrans = vec3(0.0);
@@ -107,5 +117,7 @@ class Node
 	Children mChildren;
 
 	bool mEnabled = true;
+	
+	UpdateScript mUpdateScript = {};
 };
 #endif // NODE_H

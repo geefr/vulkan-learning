@@ -19,7 +19,11 @@ int main(int argc, char* argv[])
     });
 
     // Load some data into the scene
-    eng.nodegraph()->children().emplace_back(new MeshNode());
+    std::shared_ptr<MeshNode> triangle(new MeshNode());
+    triangle->updateScript([](Engine&, Node& n, double deltaT){
+		n.rotation() = n.rotation() + glm::vec3(0.0, 0.0, 0.1);
+	});
+    eng.nodegraph()->children().emplace_back(triangle);
 
     eng.run();
   } catch ( std::exception& e) {

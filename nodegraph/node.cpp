@@ -82,13 +82,17 @@
       for( auto& c: mChildren ) c->render(rend, nodeMat, viewMat, projMat);
     }
 
-    void Node::update(double deltaT)
+    void Node::update(Engine& eng, double deltaT)
     {
       if( !mEnabled ) return;
+      
+      if( mUpdateScript ) mUpdateScript(eng, *this, deltaT);
 
       doUpdate(deltaT);
-      for( auto& c : mChildren ) c->update(deltaT);
+      for( auto& c : mChildren ) c->update(eng, deltaT);
     }
+    
+    void Node::updateScript(UpdateScript s) { mUpdateScript = s; }
 
     void Node::cleanup(Renderer& rend) {
 	doCleanup(rend);

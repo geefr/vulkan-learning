@@ -65,6 +65,13 @@ public:
 	// TODO: Store command buffer on a per-mesh basis, or recreate each frame? What's faster?
 	// TODO: Currently making a separate buffer for each mesh, should have a batched version/auto-batch things
   };
+  
+  /// Push constants for matrix data
+  /// @note Size must be multiple of 4 here, renderer doesn't check size
+  struct PushConstant_matrices {
+    glm::mat4x4 mvp;
+    glm::mat4x4 m;
+  };
 
   /**
    * Create a vertex buffer and upload data to the GPU
@@ -124,8 +131,15 @@ private:
   std::vector<vk::UniqueSemaphore> mRenderFinishedSemaphores;
   std::vector<vk::UniqueFence> mFrameInFlightFences;
 
+  vk::PushConstantRange mPushConstant_matrices_range;
+
+  struct MeshRenderInstance { 
+	  std::shared_ptr<Mesh> mesh;
+	  glm::mat4x4 mvp;
+  };
+
   // Members used to track data during a frame/nodegraph traversal
-  std::list<std::shared_ptr<Mesh>> mFrameMeshesToRender;
+  std::list<MeshRenderInstance> mFrameMeshesToRender;
 };
 
 #endif

@@ -52,7 +52,7 @@ void Engine::loop() {
 		mRend->frameStart();
 
 		// TODO: Update time delta - Should do this at the start of the loop, have the time available for any global event callbacks?
-		mNodeGraph->update(0);
+		mNodeGraph->update(*this, 0);
 
 		// TODO: Proper values for matrices - Need to add cameras
 		glm::mat4x4 viewMat(1.0);

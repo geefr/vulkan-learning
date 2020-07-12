@@ -78,6 +78,15 @@ void Renderer::initVK() {
 		// Location, Binding, Format, Offset
 		mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(VertexData, vertCoord));
 		mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(VertexData, vertColour));
+		
+		// Register the push constant blocks
+		mPushConstant_matrices_range = vk::PushConstantRange()
+		  .setStageFlags(vk::ShaderStageFlagBits::eVertex)
+		  .setOffset(0)
+		  .setSize(sizeof(PushConstant_matrices));
+		mGraphicsPipeline->pushConstants().emplace_back(mPushConstant_matrices_range);
+		
+		// Finally build the pipeline
 		mGraphicsPipeline->build();
 	}
 
@@ -147,8 +156,20 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   // Now it's time to finally draw our one crappy little triangle >.<
   commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->pipeline());
 
-  for( auto& mesh : mFrameMeshesToRender ) {
-    auto& vertBuf = mesh->mVertexBuffer;
+  for( auto& meshdata : mFrameMeshesToRender ) {
+	// Set push constants
+	PushConstant_matrices mats {
+		meshdata.mvp,
+	};
+	commandBuffer.pushConstants(
+	  mGraphicsPipeline->pipelineLayout(),
+	  mPushConstant_matrices_range.stageFlags,
+	  mPushConstant_matrices_range.offset,
+	  sizeof(PushConstant_matrices),
+	  &mats);
+		  
+    // Set vertex buffer
+    auto& vertBuf = meshdata.mesh->mVertexBuffer;
     // TODO: Probably not efficient - Could batch multiple buffers/offsets here
     vk::Buffer buffers[] = { vertBuf->buffer() };
     vk::DeviceSize offsets[] = { 0 };
@@ -171,7 +192,10 @@ void Renderer::renderMesh( std::shared_ptr<Mesh> mesh, glm::mat4x4 mvp ) {
 	if( !mesh ) return;
 	// Note that we need to render the mesh, frameEnd will
 	// submit this to the gpu as needed
-	mFrameMeshesToRender.emplace_back(mesh);
+	MeshRenderInstance i;
+	i.mesh = mesh;
+	i.mvp = mvp;
+	mFrameMeshesToRender.emplace_back(i);
 }
 
 bool Renderer::pollWindowEvents() {

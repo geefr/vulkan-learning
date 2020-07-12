@@ -7,17 +7,17 @@
 
 #version 450
 
-layout(location = 0) in vec4 vert_partPos;
+layout(location = 0) in vec4 vert_coord;
 layout(location = 1) in vec4 vert_colour;
-layout(location = 2) in float vert_radius;
 
 layout(location = 0) out vec4 fragColour;
 
+layout(push_constant) uniform push_matrices_t {
+	mat4 mvp;
+} matrices;
+
 void main() {
-  gl_Position = vert_partPos;
-
-  // Set the particle size based on dimensions
-  gl_PointSize = 1;
-
+  gl_Position = matrices.mvp * vert_coord;
+  
   fragColour = vert_colour;
 }
