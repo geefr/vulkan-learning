@@ -14,6 +14,7 @@
 #include <memory>
 #include <list>
 #include <set>
+#include <chrono>
 
 class Node;
 class Renderer;
@@ -59,6 +60,9 @@ private:
 
   std::unique_ptr<Renderer> mRend;
   std::shared_ptr<Node> mNodeGraph;
+
+  std::chrono::time_point<std::chrono::high_resolution_clock> mTimeStart;
+  std::chrono::time_point<std::chrono::high_resolution_clock> mTimeCurrent;
 
   std::list<std::shared_ptr<Event>> mEventQueue;
   std::list<GlobalEventCallback> mGlobalEventCallbacks;

@@ -23,6 +23,9 @@ void Engine::run() {
 	mNodeGraph->init(*mRend.get());
 	mNodeGraph->upload(*mRend.get());
 
+	mTimeStart = std::chrono::high_resolution_clock::now();
+	mTimeCurrent = mTimeStart;
+
 	loop();
 	cleanup();
 }
@@ -36,12 +39,18 @@ void Engine::initRenderer() {
 
 void Engine::loop() {
 	while(true) {
+		// Calculate the frame time
+		std::chrono::time_point<std::chrono::high_resolution_clock> current = std::chrono::high_resolution_clock::now();
+		auto deltaT = ((double)(current - mTimeCurrent).count()) / 1.0e9;
+		mTimeCurrent = current;
+		
 		// Poll for events
 		// TODO: Just handling the window here - should poll any
 		// other input devices/systems like joysticks, VR controllers, etc
 		mEventQueue.clear();
 		// Renderer can request a quit here - TODO: Should really handle as a QuitEvent instance
-	        if( !mRend->pollWindowEvents() ) break;
+		if( !mRend->pollWindowEvents() ) break;
+		
 		// Handle explicit event callbacks (Not bound to any particular node/script)
 		callEventCallbacks();
 
@@ -51,8 +60,8 @@ void Engine::loop() {
 		// Start the frame (Let the renderer reset what it needs)
 		mRend->frameStart();
 
-		// TODO: Update time delta - Should do this at the start of the loop, have the time available for any global event callbacks?
-		mNodeGraph->update(*this, 0);
+		// Perform the update traversal
+		mNodeGraph->update(*this, deltaT);
 
 		// TODO: Proper values for matrices - Need to add cameras
 		glm::mat4x4 viewMat(1.0);
