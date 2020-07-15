@@ -14,11 +14,11 @@
 
 #include <map>
 
-GraphicsPipeline::GraphicsPipeline(WindowIntegration& windowIntegration, DeviceInstance& deviceInstance)
+GraphicsPipeline::GraphicsPipeline(WindowIntegration& windowIntegration, DeviceInstance& deviceInstance, bool invertY)
   : Pipeline(deviceInstance)
-  , mWindowIntegration(windowIntegration) {
-
-}
+  , mWindowIntegration(windowIntegration)
+  , mInvertY(invertY)
+{}
 
 void GraphicsPipeline::createRenderPass() {
   // The render pass contains stuff like what the framebuffer attachments are and things
@@ -123,7 +123,13 @@ void GraphicsPipeline::createPipeline() {
       ;
 
   // Viewport
+  // TODO: This should be set as dynamic state, passed through in the render pass
   vk::Viewport viewport(0.f,0.f, mWindowIntegration.extent().width, mWindowIntegration.extent().height, 0.f, 1.f);
+  if( mInvertY ) {
+      // Flip the viewport
+      viewport.height = - static_cast<float>(mWindowIntegration.extent().height);
+      viewport.y = static_cast<float>(mWindowIntegration.extent().height);
+  }
   vk::Rect2D scissor({0,0},mWindowIntegration.extent());
   auto viewportInfo = vk::PipelineViewportStateCreateInfo()
       .setFlags({})

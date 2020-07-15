@@ -22,7 +22,7 @@ class WindowIntegration;
 class GraphicsPipeline : public Pipeline
 {
 public:
-  GraphicsPipeline(WindowIntegration& windowIntegration, DeviceInstance& deviceInstance);
+  GraphicsPipeline(WindowIntegration& windowIntegration, DeviceInstance& deviceInstance, bool invertY = false);
   virtual ~GraphicsPipeline() final override {}
 
   vk::RenderPass& renderPass() { return mRenderPass.get(); }
@@ -47,6 +47,9 @@ private:
 
   // Input assembly settings
   vk::PrimitiveTopology mInputAssemblyPrimitiveTopology = vk::PrimitiveTopology::eTriangleList;
+
+  // Whether to flip y axis (follow opengl conventions) or not (follow vulkan conventions)
+  bool mInvertY = false;
 };
 
 #endif // GRAPHICSPIPELINE_H

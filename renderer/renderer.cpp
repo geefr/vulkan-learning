@@ -60,7 +60,7 @@ void Renderer::initVK() {
 
 	mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mQueue));
 
-	mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get()));
+    mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get(), true));
 
 	// Build the graphics pipeline
 	// In this case we can throw away the shader modules after building as they're only used by the one pipeline
