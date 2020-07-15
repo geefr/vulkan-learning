@@ -11,6 +11,8 @@ add_library( ${targetName} ${LIB_TYPE}
 	engine.cpp
 	event.h
 	event.cpp
+	camera.h
+	camera.cpp
 )
 target_link_libraries( ${targetName} renderer nodegraph )
 
