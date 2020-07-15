@@ -114,7 +114,7 @@ void GLTFLoader::parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::No
             auto bufferStart = reinterpret_cast<const float*>(&(gModel.buffers[positionView.buffer].data[positionAccess.byteOffset + positionView.byteOffset]));
             for( auto vI = 0u; vI < positionAccess.count; ++vI ) {
                 Renderer::VertexData vert;
-                vert.vertCoord = glm::make_vec3(&bufferStart[vI * positionStride]);
+                vert.vertCoord = glm::vec4(glm::make_vec3(&bufferStart[vI * positionStride]), 1.0);
                 // TODO: Read the other vertex parameters, or at least whatever the renderer supports
                 vertices.emplace_back(vert);
             }

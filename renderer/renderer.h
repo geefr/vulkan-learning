@@ -47,7 +47,7 @@ public:
 
   struct VertexData
   {
-    glm::vec3 vertCoord =  {0.f,0.f,0.f};
+    glm::vec4 vertCoord =  {0.f,0.f,0.f,0.f};
     glm::vec4 vertColour = {1.f,1.f,1.f,1.f};
   };
 
@@ -69,8 +69,9 @@ public:
   /// Push constants for matrix data
   /// @note Size must be multiple of 4 here, renderer doesn't check size
   struct PushConstant_matrices {
-    glm::mat4x4 mvp;
-    glm::mat4x4 m;
+    glm::mat4x4 model;
+    glm::mat4x4 view;
+    glm::mat4x4 projection;
   };
 
   /**
@@ -82,7 +83,7 @@ public:
    * Render a mesh (submit it to the render pipeline)
    * Called by any mesh nodes in the node graph during the render traversal
    */
-  void renderMesh( std::shared_ptr<Mesh>, glm::mat4x4 mvp );
+  void renderMesh( std::shared_ptr<Mesh> mesh, glm::mat4x4 modelMat, glm::mat4x4 viewMat, glm::mat4x4 projMat );
 
   void initWindow();
   void initVK();
@@ -135,7 +136,9 @@ private:
 
   struct MeshRenderInstance { 
 	  std::shared_ptr<Mesh> mesh;
-	  glm::mat4x4 mvp;
+      glm::mat4x4 modelMatrix;
+      glm::mat4x4 viewMatrix;
+      glm::mat4x4 projectionMatrix;
   };
 
   // Members used to track data during a frame/nodegraph traversal

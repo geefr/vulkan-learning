@@ -13,11 +13,13 @@ layout(location = 1) in vec4 vert_colour;
 layout(location = 0) out vec4 fragColour;
 
 layout(push_constant) uniform push_matrices_t {
-	mat4 mvp;
+    mat4 model;
+    mat4 view;
+    mat4 projection;
 } matrices;
 
 void main() {
-  gl_Position = matrices.mvp * vert_coord;
-  
+  gl_Position = matrices.projection * matrices.view * matrices.model * vert_coord;
+
   fragColour = vert_colour;
 }

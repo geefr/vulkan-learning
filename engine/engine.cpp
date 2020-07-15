@@ -64,7 +64,7 @@ void Engine::loop() {
 		mNodeGraph->update(*this, deltaT);
 
         // Render the scene
-        mNodeGraph->render(*mRend.get(), glm::mat4(1.0), glm::mat4(1.0));//mCamera.mViewMatrix, mCamera.mProjectionMatrix);
+        mNodeGraph->render(*mRend.get(), mCamera.mViewMatrix, mCamera.mProjectionMatrix);
 
 		// Finish the frame, renderer sends commands to gpu here
 		mRend->frameEnd();

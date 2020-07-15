@@ -3,11 +3,12 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 Camera::Camera() {
-    projectionPerspective( 90.0, 1.0, 0.01, 100.0);
-    // projectionOrtho(glm::vec4(-10.0, 10.0, -10.0, 10.0), 0.01, 100.0);
-    lookAt( {0.0,0.0,0.0},
-            {0.0,5.0,-5.0},
-            {0.0,1.0,0.0});
+    // TODO: Pass aspect in - handle viewport/window size changes
+    projectionPerspective( glm::radians(30.f), 800.f / 600.f,  0.001f,1000.f);
+
+    lookAt( {0.0,5.0,-5.0},  // eye
+            {0.0,0.0,0.0}, // center
+            {0.0,1.0,0.0}); // up
 }
 
 Camera::~Camera() {}

@@ -60,6 +60,9 @@ void Renderer::initVK() {
 
 	mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mQueue));
 
+    // Create the pipeline, with a flag to invert the viewport height (Switch to left handed coordinate system)
+    // If changing this check the compile flags for GLM_FORCE_LEFT_HANDED - The rest of the engine uses one cs
+    // and the renderer should handle it
     mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get(), true));
 
 	// Build the graphics pipeline
@@ -76,7 +79,7 @@ void Renderer::initVK() {
 		mGraphicsPipeline->vertexInputBindings().emplace_back(vertBufferBinding);
 
 		// Location, Binding, Format, Offset
-		mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(VertexData, vertCoord));
+        mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(VertexData, vertCoord));
 		mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(VertexData, vertColour));
 		
 		// Register the push constant blocks
@@ -158,9 +161,10 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
 
   for( auto& meshdata : mFrameMeshesToRender ) {
 	// Set push constants
-	PushConstant_matrices mats {
-		meshdata.mvp,
-	};
+    PushConstant_matrices mats;
+    mats.model = meshdata.modelMatrix;
+    mats.view = meshdata.viewMatrix;
+    mats.projection = meshdata.projectionMatrix;
 	commandBuffer.pushConstants(
 	  mGraphicsPipeline->pipelineLayout(),
 	  mPushConstant_matrices_range.stageFlags,
@@ -188,13 +192,16 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   commandBuffer.end();
 }
 
-void Renderer::renderMesh( std::shared_ptr<Mesh> mesh, glm::mat4x4 mvp ) {
+void Renderer::renderMesh( std::shared_ptr<Mesh> mesh, glm::mat4x4 modelMat, glm::mat4x4 viewMat, glm::mat4x4 projMat ) {
 	if( !mesh ) return;
 	// Note that we need to render the mesh, frameEnd will
 	// submit this to the gpu as needed
 	MeshRenderInstance i;
 	i.mesh = mesh;
-	i.mvp = mvp;
+    i.modelMatrix = modelMat;
+    i.viewMatrix = viewMat;
+    i.projectionMatrix = projMat;
+
 	mFrameMeshesToRender.emplace_back(i);
 }
 
