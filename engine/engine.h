@@ -9,6 +9,7 @@
 #define ENGINE_H
 
 #include "event.h"
+#include "camera.h"
 
 #include <atomic>
 #include <memory>
@@ -40,6 +41,12 @@ public:
    */
   std::shared_ptr<Node> nodegraph();
 
+  /**
+   * The camera/viewport of the scene
+   * TODO: For now this is a single camera managed by the engine. VR support will require something much more complicated, and multiple cameras in the scene would be handy.
+   */
+  Camera& camera();
+
   void addEvent(std::shared_ptr<Event> e);
   void addEvent(Event* e);
   void callEventCallbacks();
@@ -63,6 +70,8 @@ private:
 
   std::chrono::time_point<std::chrono::high_resolution_clock> mTimeStart;
   std::chrono::time_point<std::chrono::high_resolution_clock> mTimeCurrent;
+
+  Camera mCamera;
 
   std::list<std::shared_ptr<Event>> mEventQueue;
   std::list<GlobalEventCallback> mGlobalEventCallbacks;

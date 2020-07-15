@@ -63,11 +63,8 @@ void Engine::loop() {
 		// Perform the update traversal
 		mNodeGraph->update(*this, deltaT);
 
-		// TODO: Proper values for matrices - Need to add cameras
-		glm::mat4x4 viewMat(1.0);
-		glm::mat4x4 projMat(1.0);
-		
-		mNodeGraph->render(*mRend.get(), viewMat, projMat);
+        // Render the scene
+        mNodeGraph->render(*mRend.get(), glm::mat4(1.0), glm::mat4(1.0));//mCamera.mViewMatrix, mCamera.mProjectionMatrix);
 
 		// Finish the frame, renderer sends commands to gpu here
 		mRend->frameEnd();
@@ -79,6 +76,8 @@ void Engine::cleanup() {
 	mNodeGraph->cleanup(*mRend.get());
 	mRend->cleanup();
 }
+
+Camera& Engine::camera() { return mCamera; }
 
 void Engine::addEvent(std::shared_ptr<Event> e) { mEventQueue.emplace_back(e); }
 void Engine::addEvent(Event* e) { mEventQueue.emplace_back(e); }
