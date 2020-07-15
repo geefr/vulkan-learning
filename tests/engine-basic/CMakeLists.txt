@@ -5,9 +5,10 @@ include_directories(
 	${PROJECT_SOURCE_DIR}/renderer/
 	${PROJECT_SOURCE_DIR}/engine/
 	${PROJECT_SOURCE_DIR}/nodegraph/
+        ${PROJECT_SOURCE_DIR}/loaders/
 )
 
 add_executable(${targetName}
   main.cpp
 	)
-target_link_libraries( ${targetName} engine nodegraph )
+target_link_libraries( ${targetName} engine nodegraph loaders )

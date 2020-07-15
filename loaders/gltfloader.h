@@ -9,8 +9,13 @@
 #define GLTFLOADER_H
 
 #include <string>
+#include <memory>
 
 class Node;
+namespace tinygltf {
+  class Node;
+  class Model;
+}
 
 /// TODO: For now just a nasty static utility method,
 /// loaders should be a proper class/concept once the
@@ -18,7 +23,10 @@ class Node;
 /// background thread, or some generic scene format
 /// that includes multiple input formats.
 class GLTFLoader {
-  static bool load(std::string fileName, Node& root);
+public:
+  static std::shared_ptr<Node> load(std::string fileName);
+private:
+  static void parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::Node& gNode, tinygltf::Model& gModel );
 };
 
 #endif

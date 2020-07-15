@@ -8,12 +8,15 @@
 #include "gltfloader.h"
 #include "meshnode.h"
 
+
+#define TINYGLTF_NO_STB_IMAGE
+#define TINYGLTF_NO_STB_IMAGE_WRITE
+#define TINYGLTF_IMPLEMENTATION
 #include "tiny_gltf.h"
 
 #include <iostream>
-#include <memory>
 
-bool GLTFLoader::load(std::string fileName, Node& root) {
+std::shared_ptr<Node> GLTFLoader::load(std::string fileName) {
 
 	// TODO: https://github.com/SaschaWillems/Vulkan-glTF-PBR/blob/master/base/VulkanglTFModel.hpp
 	// - Open the file, load into gltf - loadFromFile method
@@ -40,20 +43,118 @@ bool GLTFLoader::load(std::string fileName, Node& root) {
 		std::cerr << "Failed to load GLTF File: " << fileName << "\n";
 		std::cerr << "Errors: " << error << "\n";
 		std::cerr << "Warnings: " << warning << "\n";
-		return false;
+        return {};
 	}
 
 	auto sceneID = gltfModel.defaultScene > -1 ? gltfModel.defaultScene : 0;
 	auto& scene = gltfModel.scenes[sceneID];
 
+    std::shared_ptr<Node> root(new Node());
 	for( auto gltfNodeID = 0u; gltfNodeID < scene.nodes.size(); ++gltfNodeID ) {
 		// Parse the gltf node and create one of ours
-		auto& gltfNode = gltfModel.nodes[scene.nodes[gltfNodeID]];
+        auto& gNode = gltfModel.nodes[scene.nodes[gltfNodeID]];
 
-		std::shared_ptr<Node> n(new MeshNode());
-		blablabla you are here
+        parseGltfNode( root, gNode, gltfModel );
 	}
 	
-	return true;
+    return root;
 }
 
+void GLTFLoader::parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::Node& gNode, tinygltf::Model& gModel ) {
+
+    std::shared_ptr<Node> n(new Node());
+
+    // Node's model matrix
+    if( gNode.translation.size() == 3 ) n->translation() = glm::make_vec3(gNode.translation.data());
+    if( gNode.rotation.size() == 4) {
+        std::cerr << "TODO: GLTF Loader - Need node rotation from quat, ignoring rotation from gltf model" << std::endl;
+    }
+    if( gNode.scale.size() == 3 ) n->scale() = glm::make_vec3(gNode.scale.data());
+    if( gNode.matrix.size() == 16 ) {
+        std::cerr << "TODO: GLTF Loader - Setting matrix explicitly may conflict/add to separate translation/scale parameters?" << std::endl;
+        n->userModelMatrix(glm::make_mat4x4(gNode.matrix.data()));
+    }
+
+    // Handle children of the gltf node
+    for( auto& gChild : gNode.children ) {
+        parseGltfNode( n, gModel.nodes[gChild], gModel );
+    }
+
+    // Parse mesh data
+    // TODO: The engine/renderer is quite limited here, this will need rework later
+    if( gNode.mesh > -1 ) {
+        auto& gMesh = gModel.meshes[gNode.mesh];
+
+        for( auto& gPrimitive : gMesh.primitives ) {
+
+
+            /*
+             * GLTF contains a lot of useful information - we can read just what we need here. Each vertex is similar to the usual vertex definition needed in shaders
+             * Sascha's example reads the following, expect the format can contain more
+             * - position (mandatory or we'll ignore it)
+             * - normal
+             * - texCoord 0 (TODO: Assume diffuse? Is there a way to tell from the gltf file?)
+             * - texCoord 1 (TODO: Specular/Normal map? Is there a way to tell from the gltf file?)
+             * - joints 0 (animation/rigging)
+             * - weights 0 (animation/rigging)
+             */
+            if( gPrimitive.attributes.find("POSITION") == gPrimitive.attributes.end() ) continue;
+
+            std::vector<Renderer::VertexData> vertices;
+
+            // Capture all the vertices used by the primitive
+            // Looks like they're packed into a big buffer in the gltf model, with lookups from the primitive..cool!
+            auto& positionAccess = gModel.accessors[gPrimitive.attributes.find("POSITION")->second];
+            auto& positionView = gModel.bufferViews[positionAccess.bufferView];
+            auto positionStride = positionAccess.ByteStride(positionView);
+            if( positionStride < 0 ) {
+                std::cerr << "WARNING: GLTFLoader: Failed to calculate stride of position view" << std::endl;
+            }
+
+            auto bufferStart = reinterpret_cast<const float*>(&(gModel.buffers[positionView.buffer].data[positionAccess.byteOffset + positionView.byteOffset]));
+            for( auto vI = 0u; vI < positionAccess.count; ++vI ) {
+                Renderer::VertexData vert;
+                vert.vertCoord = glm::make_vec3(&bufferStart[vI * positionStride]);
+                // TODO: Read the other vertex parameters, or at least whatever the renderer supports
+                vertices.emplace_back(vert);
+            }
+
+            // If the primitive uses indices translate to a plain vertex buffer
+            if( gPrimitive.indices > -1 ) {
+                std::cerr << "WARNING: GLTFLoader: Discarding indices as renderer doesn't support them yet" << std::endl;
+
+                std::vector<Renderer::VertexData> expandedVerts;
+
+                auto& indexAccess = gModel.accessors[gPrimitive.indices];
+                auto& indexView = gModel.bufferViews[indexAccess.bufferView];
+                auto& indexBuffer = gModel.buffers[indexView.buffer];
+                auto indexPtr = reinterpret_cast<const void*>(&(indexBuffer.data[indexAccess.byteOffset + indexView.byteOffset]));
+
+                for( auto indexI = 0u; indexI < indexAccess.count; ++indexI ) {
+                    uint32_t index = 0;
+                    switch( indexAccess.componentType ) {
+                        case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT:
+                            index = reinterpret_cast<const uint32_t*>(indexPtr)[indexI];
+                            break;
+                        case TINYGLTF_PARAMETER_TYPE_UNSIGNED_SHORT:
+                            index = reinterpret_cast<const uint16_t*>(indexPtr)[indexI];
+                            break;
+                        case TINYGLTF_PARAMETER_TYPE_UNSIGNED_BYTE:
+                            index = reinterpret_cast<const uint8_t*>(indexPtr)[indexI];
+                            break;
+                    }
+                    if( index >= vertices.size() ) continue;
+                    expandedVerts.emplace_back(vertices[index]);
+                }
+
+                vertices = expandedVerts;
+            }
+
+            std::shared_ptr<MeshNode> mesh(new MeshNode(vertices));
+            n->children().emplace_back(mesh);
+        }
+    }
+
+    // Add the new node to the root and finish
+    targetParent->children().emplace_back(n);
+}

@@ -47,8 +47,8 @@ public:
 
   struct VertexData
   {
-    float vertCoord[3] = {0.f,0.f,0.f};
-    float vertColour[4] = {0.f,0.f,0.f,0.f};
+    glm::vec3 vertCoord =  {0.f,0.f,0.f};
+    glm::vec4 vertColour = {1.f,1.f,1.f,1.f};
   };
 
   // A mesh - A block of data to be rendered

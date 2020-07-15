@@ -6,24 +6,31 @@
 
 MeshNode::MeshNode()
 {
+    // TODO: This is just a dummy so we see something
+    mVertData = {
+        {{-.5,-.5,0},{1,0,0,1}},
+        {{-.5,.5,0},{0,1,0,1}},
+        {{ .5,-.5,0},{0,0,1,1}},
+
+        {{ .5,-.5,0},{0,0,1,1}},
+        {{-.5,.5,0},{0,1,0,1}},
+        {{.5,.5,0},{1,0,1,.5}},
+    };
 }
 
 MeshNode::~MeshNode()
 {
 }
 
+MeshNode::MeshNode( const std::vector<Renderer::VertexData>& vertData )
+  : mVertData(vertData)
+{
+}
+
 void MeshNode::doInit(Renderer& rend)
 {
-	std::vector<Renderer::VertexData> vertData = {
-		{{-.5,-.5,0},{1,0,0,1}},
-		{{-.5,.5,0},{0,1,0,1}},
-		{{ .5,-.5,0},{0,0,1,1}},
-
-		{{ .5,-.5,0},{0,0,1,1}},
-		{{-.5,.5,0},{0,1,0,1}},
-		{{.5,.5,0},{1,0,1,.5}},
-	};
-	mMesh.reset(new Renderer::Mesh(vertData));
+    mMesh.reset(new Renderer::Mesh(mVertData));
+    mVertData.clear();
 }
 
 void MeshNode::doUpload(Renderer& rend)
