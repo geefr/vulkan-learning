@@ -101,6 +101,7 @@ void GLTFLoader::parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::No
             if( gPrimitive.attributes.find("POSITION") == gPrimitive.attributes.end() ) continue;
 
             std::vector<Vertex> vertices;
+            std::vector<uint32_t> indices;
 
             // Capture all the vertices used by the primitive
             // Looks like they're packed into a big buffer in the gltf model, with lookups from the primitive..cool!
@@ -145,12 +146,14 @@ void GLTFLoader::parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::No
                     }
                     if( index >= vertices.size() ) continue;
                     expandedVerts.emplace_back(vertices[index]);
+
+                    indices.emplace_back(indexI);
                 }
 
                 vertices = expandedVerts;
             }
 
-            std::shared_ptr<MeshNode> mesh(new MeshNode(vertices));
+            std::shared_ptr<MeshNode> mesh(new MeshNode(vertices, indices));
             n->children().emplace_back(mesh);
         }
     }

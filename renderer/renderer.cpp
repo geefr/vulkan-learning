@@ -14,12 +14,12 @@ Renderer::~Renderer() {
 }
 
 void Renderer::initWindow() {
+    // TODO: This should be in a separate class - Renderer shouldn't be tied to one window system
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 	mWindow = glfwCreateWindow(mWindowWidth, mWindowHeight, "Vulkan Experiment", nullptr, nullptr);
-
 
 	// Initialise event handlers
 	glfwSetWindowUserPointer(mWindow, this);
@@ -44,9 +44,10 @@ void Renderer::initVK() {
 	const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 	std::vector<const char*> requiredExtensions;
 	for(uint32_t i = 0; i < glfwExtensionCount; ++i ) requiredExtensions.push_back(glfwExtensions[i]);
-	// Just the one queue here for drawing our triangle
+
+    // Just the one queue here for rendering
 	std::vector<vk::QueueFlags> requiredQueues = { vk::QueueFlagBits::eGraphics };
-	mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "Vulkan Test Application", 1, VK_API_VERSION_1_0, requiredQueues));
+    mDeviceInstance.reset(new DeviceInstance(requiredExtensions, {}, "Geefr Vulkan Renderer", 1, VK_API_VERSION_1_1, requiredQueues));
 	mQueue = mDeviceInstance->getQueue(requiredQueues[0]);
 	if( !mQueue ) throw std::runtime_error("Failed to get graphics queue from device");
 
@@ -57,7 +58,6 @@ void Renderer::initVK() {
 	// Create a logical device to interact with
 	// To do this we also need to specify how many queues from which families we want to create
 	// In this case just 1 queue from the first family which supports graphics
-
 	mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mQueue));
 
     // Create the pipeline, with a flag to invert the viewport height (Switch to left handed coordinate system)
@@ -68,7 +68,7 @@ void Renderer::initVK() {
 	// Build the graphics pipeline
 	// In this case we can throw away the shader modules after building as they're only used by the one pipeline
 	{
-		mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eVertex] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/flatshading.vert.spv");
+        mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eVertex] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/common.vert.spv");
 		mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eFragment] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/flatshading.frag.spv");
 
 		// The layout of our vertex buffers
@@ -83,7 +83,7 @@ void Renderer::initVK() {
         mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, normal));
         mGraphicsPipeline->vertexInputAttributes().emplace_back(2, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, uv0));
         mGraphicsPipeline->vertexInputAttributes().emplace_back(3, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, uv0));
-		
+
 		// Register the push constant blocks
 		mPushConstant_matrices_range = vk::PushConstantRange()
 		  .setStageFlags(vk::ShaderStageFlagBits::eVertex)
@@ -126,11 +126,6 @@ void Renderer::initVK() {
 		;
 
 	mCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
-
-//	for( auto i = 0u; i < mCommandBuffers.size(); ++i ) {
-//		auto commandBuffer = mCommandBuffers[i].get();
-//		buildCommandBuffer(commandBuffer, mFrameBuffer->frameBuffers()[i].get());
-//	}
 }
 
 void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer) {
@@ -180,11 +175,13 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
     vk::Buffer buffers[] = { vertBuf->buffer() };
     vk::DeviceSize offsets[] = { 0 };
     commandBuffer.bindVertexBuffers(0, 1, buffers, offsets);
-    commandBuffer.draw(static_cast<uint32_t>(vertBuf->size() / sizeof(Vertex)), // Draw n vertices
-                       1, // Used for instanced rendering, 1 otherwise
-                       0, // First vertex
-                       0  // First instance
-                       );
+
+    // Set index buffer
+    auto& idxBuf = meshdata.mesh->mIndexBuffer;
+    commandBuffer.bindIndexBuffer( idxBuf->buffer(), 0, vk::IndexType::eUint32 );
+
+    // Draw
+    commandBuffer.drawIndexed(static_cast<uint32_t>(idxBuf->size() / sizeof(uint32_t)), 1, 0, 0, 0);
   }
 
   // End the render pass
@@ -343,18 +340,12 @@ std::unique_ptr<SimpleBuffer> Renderer::createSimpleVertexBuffer(std::vector<Ver
 	return result;
 }
 
-Renderer::Mesh::Mesh(const std::vector<Vertex>& v)
-	: verts(v)
-{}
-
-void Renderer::Mesh::upload(Renderer& rend) {
-	mVertexBuffer = rend.createSimpleVertexBuffer(verts);
-	std::memcpy(mVertexBuffer->map(), verts.data(), verts.size() * sizeof(decltype(verts)::value_type));
-	mVertexBuffer->flush();
-	mVertexBuffer->unmap();
+std::unique_ptr<SimpleBuffer> Renderer::createSimpleIndexBuffer(std::vector<uint32_t> indices) {
+    std::unique_ptr<SimpleBuffer> result( new SimpleBuffer(
+                *mDeviceInstance.get(),
+                indices.size() * sizeof(decltype(indices)::value_type),
+                vk::BufferUsageFlagBits::eIndexBuffer) );
+    return result;
 }
 
-void Renderer::Mesh::cleanup(Renderer& rend) {
-  mVertexBuffer.reset();
-}
 

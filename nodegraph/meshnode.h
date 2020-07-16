@@ -20,7 +20,7 @@ class MeshNode : public Node
 {
 public:
     MeshNode();
-    MeshNode( const std::vector<Vertex>& vertData );
+    MeshNode( const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices );
 	virtual ~MeshNode();
 
 	// Render this node and any children
@@ -29,8 +29,11 @@ public:
 	void doRender(Renderer& rend, mat4x4 nodeMat, mat4x4 viewMat, mat4x4 projMat) override;
 	void doCleanup(Renderer& rend) override;
 private:
-    std::vector<Vertex> mVertData; // Cleared when mesh is created/uploaded
-	std::shared_ptr<Renderer::Mesh> mMesh;
+    std::shared_ptr<Mesh> mMesh;
+
+    // Cleared when mesh is created/uploaded
+    std::vector<Vertex> mVertices;
+    std::vector<uint32_t> mIndices;
 };
 
 #endif

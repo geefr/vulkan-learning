@@ -11,4 +11,4 @@ add_library( ${targetName} ${LIB_TYPE}
 	meshnode.h
 	meshnode.cpp
 	)
-target_link_libraries( ${targetName} renderer )
+target_link_libraries( ${targetName} renderer engine )

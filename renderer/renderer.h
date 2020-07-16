@@ -15,6 +15,8 @@
 #include "util/pipelines/graphicspipeline.h"
 
 #include "vertex.h"
+#include "mesh.h"
+#include "material.h"
 
 #ifdef USE_GLFW
 # define GLFW_INCLUDE_VULKAN
@@ -46,21 +48,6 @@ class Renderer
 public:
   Renderer( Engine& engine );
   ~Renderer();
-
-  // A mesh - A block of data to be rendered
-  struct Mesh {
-    Mesh(const std::vector<Vertex>& v);
-
-	/// Create buffers and upload data to the GPU
-	void upload(Renderer& rend);
-	/// Delete buffers
-	void cleanup(Renderer& rend);
-
-    std::vector<Vertex> verts;
-	std::unique_ptr<SimpleBuffer> mVertexBuffer;
-	// TODO: Store command buffer on a per-mesh basis, or recreate each frame? What's faster?
-	// TODO: Currently making a separate buffer for each mesh, should have a batched version/auto-batch things
-  };
   
   /// Push constants for matrix data
   /// @note Size must be multiple of 4 here, renderer doesn't check size
@@ -71,9 +58,10 @@ public:
   };
 
   /**
-   * Create a vertex buffer and upload data to the GPU
+   * Create buffers/upload to GPU
    */
   std::unique_ptr<SimpleBuffer> createSimpleVertexBuffer(std::vector<Vertex> verts);
+  std::unique_ptr<SimpleBuffer> createSimpleIndexBuffer(std::vector<uint32_t> indices);
 
   /**
    * Render a mesh (submit it to the render pipeline)

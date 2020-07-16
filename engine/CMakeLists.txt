@@ -15,6 +15,9 @@ add_library( ${targetName} ${LIB_TYPE}
 	camera.h
 	camera.cpp
         vertex.h
+	mesh.h
+        mesh.cpp
+	material.h
 )
 target_link_libraries( ${targetName} renderer nodegraph )
 
