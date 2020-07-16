@@ -15,14 +15,8 @@ int main(int argc, char* argv[])
   }
 
   try {
+    // Create the engine, window, renderer, etc.
     Engine eng;
-
-    // Setup global actions
-    eng.addGlobalEventCallback([](Engine& engine, Event& e) {
-      if( auto keypress = dynamic_cast<KeyPressEvent*>(&e) ) {
-        if( keypress->mKey == 256 ) engine.quit();
-      }
-    });
 
     // Load some data into the scene
     if( !modelFile.empty() ) {
@@ -43,7 +37,30 @@ int main(int argc, char* argv[])
         eng.nodegraph()->children().emplace_back(dummyMesh);
     }
 
+    // Event Handling
+    eng.addGlobalEventCallback([](Engine& engine, Event& e) {
+      if( auto keypress = dynamic_cast<KeyPressEvent*>(&e) ) {
+        if( keypress->mKey == 256 ) engine.quit();
+      }
+    });
+
+
+    // A global per-update call (TODO: Just hooking the root node here, may be better as a bunch of callback on the engine, independent of the node graph?)
+    eng.nodegraph()->updateScript([](Engine& eng, Node&, double deltaT) {
+        static float camRot = 0.0; // TODO: Should have a way to store attributes on the engine/nodes? Avoid a static here?
+
+        // Just sweep the camera around the scene for now
+        camRot += 1.5 * deltaT;
+        glm::vec4 camPos(0.0, 2.0, -5.0, 1.0);
+        glm::mat4 camRotMat(1.0f);
+        camRotMat = glm::rotate(camRotMat, camRot, glm::vec3(0.0, 1.0, 0.0));
+        camPos = camRotMat * camPos;
+        eng.camera().lookAt(camPos, glm::vec3(0.0,0.0,0.0), glm::vec3(0.0,1.0,0.0));
+    });
+
+    // Start the engine!
     eng.run();
+
   } catch ( std::exception& e) {
     std::cerr << e.what() << std::endl;
     return EXIT_FAILURE;
