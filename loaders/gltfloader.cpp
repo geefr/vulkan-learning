@@ -18,45 +18,45 @@
 
 std::shared_ptr<Node> GLTFLoader::load(std::string fileName) {
 
-	// TODO: https://github.com/SaschaWillems/Vulkan-glTF-PBR/blob/master/base/VulkanglTFModel.hpp
-	// - Open the file, load into gltf - loadFromFile method
-	// - Take the tinygltf::Node and iterate - loadNode method
-	// - Extract information we can use
-	//   - Ideally all of it, but we don't support animations/PBR yet
-	
+    // TODO: https://github.com/SaschaWillems/Vulkan-glTF-PBR/blob/master/base/VulkanglTFModel.hpp
+    // - Open the file, load into gltf - loadFromFile method
+    // - Take the tinygltf::Node and iterate - loadNode method
+    // - Extract information we can use
+    //   - Ideally all of it, but we don't support animations/PBR yet
 
-	tinygltf::Model gltfModel;
-	tinygltf::TinyGLTF gltfContext;
 
-	bool binary = false;
-	size_t extpos = fileName.rfind('.', fileName.length());
-	if (extpos != std::string::npos) {
-		binary = (fileName.substr(extpos + 1, fileName.length() - extpos) == "glb");
-	}
+    tinygltf::Model gltfModel;
+    tinygltf::TinyGLTF gltfContext;
 
-	std::string error;
-	std::string warning;
-	bool fileLoaded = binary ? gltfContext.LoadBinaryFromFile(&gltfModel, &error, &warning, fileName.c_str()) : 
-		                   gltfContext.LoadASCIIFromFile(&gltfModel, &error, &warning, fileName.c_str());
+    bool binary = false;
+    size_t extpos = fileName.rfind('.', fileName.length());
+    if (extpos != std::string::npos) {
+        binary = (fileName.substr(extpos + 1, fileName.length() - extpos) == "glb");
+    }
 
-	if( !fileLoaded ) {
-		std::cerr << "Failed to load GLTF File: " << fileName << "\n";
-		std::cerr << "Errors: " << error << "\n";
-		std::cerr << "Warnings: " << warning << "\n";
+    std::string error;
+    std::string warning;
+    bool fileLoaded = binary ? gltfContext.LoadBinaryFromFile(&gltfModel, &error, &warning, fileName.c_str()) :
+                               gltfContext.LoadASCIIFromFile(&gltfModel, &error, &warning, fileName.c_str());
+
+    if( !fileLoaded ) {
+        std::cerr << "Failed to load GLTF File: " << fileName << "\n";
+        std::cerr << "Errors: " << error << "\n";
+        std::cerr << "Warnings: " << warning << "\n";
         return {};
-	}
+    }
 
-	auto sceneID = gltfModel.defaultScene > -1 ? gltfModel.defaultScene : 0;
-	auto& scene = gltfModel.scenes[sceneID];
+    auto sceneID = gltfModel.defaultScene > -1 ? gltfModel.defaultScene : 0;
+    auto& scene = gltfModel.scenes[sceneID];
 
     std::shared_ptr<Node> root(new Node());
-	for( auto gltfNodeID = 0u; gltfNodeID < scene.nodes.size(); ++gltfNodeID ) {
-		// Parse the gltf node and create one of ours
+    for( auto gltfNodeID = 0u; gltfNodeID < scene.nodes.size(); ++gltfNodeID ) {
+        // Parse the gltf node and create one of ours
         auto& gNode = gltfModel.nodes[scene.nodes[gltfNodeID]];
 
         parseGltfNode( root, gNode, gltfModel );
-	}
-	
+    }
+
     return root;
 }
 
@@ -86,8 +86,6 @@ void GLTFLoader::parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::No
         auto& gMesh = gModel.meshes[gNode.mesh];
 
         for( auto& gPrimitive : gMesh.primitives ) {
-
-
             /*
              * GLTF contains a lot of useful information - we can read just what we need here. Each vertex is similar to the usual vertex definition needed in shaders
              * Sascha's example reads the following, expect the format can contain more
@@ -107,25 +105,29 @@ void GLTFLoader::parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::No
             // Looks like they're packed into a big buffer in the gltf model, with lookups from the primitive..cool!
             auto& positionAccess = gModel.accessors[gPrimitive.attributes.find("POSITION")->second];
             auto& positionView = gModel.bufferViews[positionAccess.bufferView];
-            auto positionStride = positionAccess.ByteStride(positionView);
-            if( positionStride < 0 ) {
-                std::cerr << "WARNING: GLTFLoader: Failed to calculate stride of position view" << std::endl;
-            }
 
-            auto bufferStart = reinterpret_cast<const float*>(&(gModel.buffers[positionView.buffer].data[positionAccess.byteOffset + positionView.byteOffset]));
+            auto positionStride = positionAccess.ByteStride(positionView);
+            // Convert stride from bytes -> floats
+            if( positionStride == -1 ) {
+                std::cerr << "WARNING: GLTFLoader: Failed to calculate stride of position view" << std::endl;
+                continue;
+            }
+            if( positionStride > 0 ) positionStride = positionStride / sizeof(float);
+            else positionStride = 3 * sizeof(float);
+
+            auto positionBufferStart = reinterpret_cast<const float*>(&(gModel.buffers[positionView.buffer].data[positionAccess.byteOffset + positionView.byteOffset]));
+            // Iterate through each vertex and translate to our format
             for( auto vI = 0u; vI < positionAccess.count; ++vI ) {
                 Vertex vert;
-                vert.position = glm::vec4(glm::make_vec3(&bufferStart[vI * positionStride]), 1.0);
+
+                vert.position =glm::make_vec3(&positionBufferStart[vI * positionStride]);
+
                 // TODO: Read the other vertex parameters, or at least whatever the renderer supports
                 vertices.emplace_back(vert);
             }
 
-            // If the primitive uses indices translate to a plain vertex buffer
+            // The engine/renderer don't need indices, but will use them if present
             if( gPrimitive.indices > -1 ) {
-                std::cerr << "WARNING: GLTFLoader: Discarding indices as renderer doesn't support them yet" << std::endl;
-
-                std::vector<Vertex> expandedVerts;
-
                 auto& indexAccess = gModel.accessors[gPrimitive.indices];
                 auto& indexView = gModel.bufferViews[indexAccess.bufferView];
                 auto& indexBuffer = gModel.buffers[indexView.buffer];
@@ -134,23 +136,18 @@ void GLTFLoader::parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::No
                 for( auto indexI = 0u; indexI < indexAccess.count; ++indexI ) {
                     uint32_t index = 0;
                     switch( indexAccess.componentType ) {
-                        case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT:
-                            index = reinterpret_cast<const uint32_t*>(indexPtr)[indexI];
-                            break;
-                        case TINYGLTF_PARAMETER_TYPE_UNSIGNED_SHORT:
-                            index = reinterpret_cast<const uint16_t*>(indexPtr)[indexI];
-                            break;
-                        case TINYGLTF_PARAMETER_TYPE_UNSIGNED_BYTE:
-                            index = reinterpret_cast<const uint8_t*>(indexPtr)[indexI];
-                            break;
+                    case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT:
+                        index = reinterpret_cast<const uint32_t*>(indexPtr)[indexI];
+                        break;
+                    case TINYGLTF_PARAMETER_TYPE_UNSIGNED_SHORT:
+                        index = reinterpret_cast<const uint16_t*>(indexPtr)[indexI];
+                        break;
+                    case TINYGLTF_PARAMETER_TYPE_UNSIGNED_BYTE:
+                        index = reinterpret_cast<const uint8_t*>(indexPtr)[indexI];
+                        break;
                     }
-                    if( index >= vertices.size() ) continue;
-                    expandedVerts.emplace_back(vertices[index]);
-
-                    indices.emplace_back(indexI);
+                    indices.emplace_back(index);
                 }
-
-                vertices = expandedVerts;
             }
 
             std::shared_ptr<MeshNode> mesh(new MeshNode(vertices, indices));

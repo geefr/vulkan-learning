@@ -27,6 +27,7 @@ struct Mesh {
     /// Delete buffers
     void cleanup(Renderer& rend);
 
+    // (Will be cleared once uploaded)
     std::vector<Vertex> mVertices;
     std::vector<uint32_t> mIndices;
 

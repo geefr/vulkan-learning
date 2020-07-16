@@ -19,11 +19,15 @@ void Mesh::upload(Renderer& rend) {
         std::memcpy(mVertexBuffer->map(), mVertices.data(), mVertices.size() * sizeof(decltype(mVertices)::value_type));
         mVertexBuffer->flush();
         mVertexBuffer->unmap();
+        mVertices.clear();
 
-        mIndexBuffer = rend.createSimpleIndexBuffer(mIndices);
-        std::memcpy(mIndexBuffer->map(), mIndices.data(), mIndices.size() * sizeof(decltype(mIndices)::value_type));
-        mIndexBuffer->flush();
-        mIndexBuffer->unmap();
+        if( !mIndices.empty() ) {
+            mIndexBuffer = rend.createSimpleIndexBuffer(mIndices);
+            std::memcpy(mIndexBuffer->map(), mIndices.data(), mIndices.size() * sizeof(decltype(mIndices)::value_type));
+            mIndexBuffer->flush();
+            mIndexBuffer->unmap();
+            mIndices.clear();
+        }
 }
 
 void Mesh::cleanup(Renderer& rend) {

@@ -176,12 +176,21 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
     vk::DeviceSize offsets[] = { 0 };
     commandBuffer.bindVertexBuffers(0, 1, buffers, offsets);
 
-    // Set index buffer
     auto& idxBuf = meshdata.mesh->mIndexBuffer;
-    commandBuffer.bindIndexBuffer( idxBuf->buffer(), 0, vk::IndexType::eUint32 );
+    // If there's no index buffer just draw all the vertices
+    if( !idxBuf ) {
+        commandBuffer.draw(static_cast<uint32_t>(vertBuf->size() / sizeof(Vertex)), // Draw n vertices
+            1, // Used for instanced rendering, 1 otherwise
+            0, // First vertex
+            0  // First instance
+            );
+    } else {
+        // Set index buffer
+        commandBuffer.bindIndexBuffer( idxBuf->buffer(), 0, vk::IndexType::eUint32 );
 
-    // Draw
-    commandBuffer.drawIndexed(static_cast<uint32_t>(idxBuf->size() / sizeof(uint32_t)), 1, 0, 0, 0);
+        // Draw
+        commandBuffer.drawIndexed(static_cast<uint32_t>(idxBuf->size() / sizeof(uint32_t)), 1, 0, 0, 0);
+    }
   }
 
   // End the render pass
