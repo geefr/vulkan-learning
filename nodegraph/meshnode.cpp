@@ -8,9 +8,9 @@ MeshNode::MeshNode()
 {
     // TODO: This is just a dummy so we see something
     mVertData = {
-        {{-1.0, -1.0, 0.1, 1.0},{1,0,0,1}},
-        {{ 1.0, -1.0, 0.1, 1.0},{0,1,0,1}},
-        {{ 0.0,  1.0, 0.1, 1.0},{0,0,1,1}},
+        {{-1.0, -1.0, 0.1},{0,0,-1}},
+        {{ 1.0, -1.0, 0.1},{0,0,-1}},
+        {{ 0.0,  1.0, 0.1},{0,0,-1}},
     };
 }
 
@@ -18,7 +18,7 @@ MeshNode::~MeshNode()
 {
 }
 
-MeshNode::MeshNode( const std::vector<Renderer::VertexData>& vertData )
+MeshNode::MeshNode( const std::vector<Vertex>& vertData )
   : mVertData(vertData)
 {
 }

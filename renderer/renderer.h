@@ -14,6 +14,8 @@
 #include "util/simplebuffer.h"
 #include "util/pipelines/graphicspipeline.h"
 
+#include "vertex.h"
+
 #ifdef USE_GLFW
 # define GLFW_INCLUDE_VULKAN
 # include <GLFW/glfw3.h>
@@ -45,22 +47,16 @@ public:
   Renderer( Engine& engine );
   ~Renderer();
 
-  struct VertexData
-  {
-    glm::vec4 vertCoord =  {0.f,0.f,0.f,0.f};
-    glm::vec4 vertColour = {1.f,1.f,1.f,1.f};
-  };
-
   // A mesh - A block of data to be rendered
   struct Mesh {
-	Mesh(const std::vector<VertexData>& v);
+    Mesh(const std::vector<Vertex>& v);
 
 	/// Create buffers and upload data to the GPU
 	void upload(Renderer& rend);
 	/// Delete buffers
 	void cleanup(Renderer& rend);
 
-	std::vector<VertexData> verts;
+    std::vector<Vertex> verts;
 	std::unique_ptr<SimpleBuffer> mVertexBuffer;
 	// TODO: Store command buffer on a per-mesh basis, or recreate each frame? What's faster?
 	// TODO: Currently making a separate buffer for each mesh, should have a batched version/auto-batch things
@@ -77,7 +73,7 @@ public:
   /**
    * Create a vertex buffer and upload data to the GPU
    */
-  std::unique_ptr<SimpleBuffer> createSimpleVertexBuffer(std::vector<VertexData> verts);
+  std::unique_ptr<SimpleBuffer> createSimpleVertexBuffer(std::vector<Vertex> verts);
 
   /**
    * Render a mesh (submit it to the render pipeline)

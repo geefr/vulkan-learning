@@ -74,13 +74,15 @@ void Renderer::initVK() {
 		// The layout of our vertex buffers
 		auto vertBufferBinding = vk::VertexInputBindingDescription()
 			.setBinding(0)
-			.setStride(sizeof(VertexData))
+            .setStride(sizeof(Vertex))
 			.setInputRate(vk::VertexInputRate::eVertex);
 		mGraphicsPipeline->vertexInputBindings().emplace_back(vertBufferBinding);
 
 		// Location, Binding, Format, Offset
-        mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(VertexData, vertCoord));
-		mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(VertexData, vertColour));
+        mGraphicsPipeline->vertexInputAttributes().emplace_back(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, position));
+        mGraphicsPipeline->vertexInputAttributes().emplace_back(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, normal));
+        mGraphicsPipeline->vertexInputAttributes().emplace_back(2, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, uv0));
+        mGraphicsPipeline->vertexInputAttributes().emplace_back(3, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, uv0));
 		
 		// Register the push constant blocks
 		mPushConstant_matrices_range = vk::PushConstantRange()
@@ -178,7 +180,7 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
     vk::Buffer buffers[] = { vertBuf->buffer() };
     vk::DeviceSize offsets[] = { 0 };
     commandBuffer.bindVertexBuffers(0, 1, buffers, offsets);
-    commandBuffer.draw(static_cast<uint32_t>(vertBuf->size() / sizeof(VertexData)), // Draw n vertices
+    commandBuffer.draw(static_cast<uint32_t>(vertBuf->size() / sizeof(Vertex)), // Draw n vertices
                        1, // Used for instanced rendering, 1 otherwise
                        0, // First vertex
                        0  // First instance
@@ -333,7 +335,7 @@ void Renderer::cleanup() {
 }
 
 
-std::unique_ptr<SimpleBuffer> Renderer::createSimpleVertexBuffer(std::vector<VertexData> verts) {
+std::unique_ptr<SimpleBuffer> Renderer::createSimpleVertexBuffer(std::vector<Vertex> verts) {
 	std::unique_ptr<SimpleBuffer> result( new SimpleBuffer(
 				*mDeviceInstance.get(),
 				verts.size() * sizeof(decltype(verts)::value_type),
@@ -341,7 +343,7 @@ std::unique_ptr<SimpleBuffer> Renderer::createSimpleVertexBuffer(std::vector<Ver
 	return result;
 }
 
-Renderer::Mesh::Mesh(const std::vector<VertexData>& v)
+Renderer::Mesh::Mesh(const std::vector<Vertex>& v)
 	: verts(v)
 {}
 

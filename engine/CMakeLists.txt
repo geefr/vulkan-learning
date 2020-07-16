@@ -1,9 +1,10 @@
 set( targetName "engine" )
 
 include_directories(
-	${PROJECT_SOURCE_DIR}/vulkanutils
-	${PROJECT_SOURCE_DIR}/renderer
-	${PROJECT_SOURCE_DIR}/nodegraph
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/vulkanutils
+    ${PROJECT_SOURCE_DIR}/renderer
+    ${PROJECT_SOURCE_DIR}/nodegraph
 )
 
 add_library( ${targetName} ${LIB_TYPE}
@@ -13,6 +14,7 @@ add_library( ${targetName} ${LIB_TYPE}
 	event.cpp
 	camera.h
 	camera.cpp
+        vertex.h
 )
 target_link_libraries( ${targetName} renderer nodegraph )
 

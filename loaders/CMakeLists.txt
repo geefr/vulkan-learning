@@ -5,6 +5,7 @@ include_directories(
 	${PROJECT_SOURCE_DIR}/nodegraph
 	${PROJECT_SOURCE_DIR}/renderer
 	${PROJECT_SOURCE_DIR}/vulkanutils
+        ${PROJECT_SOURCE_DIR}/engine
 )
 
 add_library( ${targetName} ${LIB_TYPE}

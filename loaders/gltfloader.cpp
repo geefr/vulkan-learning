@@ -100,7 +100,7 @@ void GLTFLoader::parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::No
              */
             if( gPrimitive.attributes.find("POSITION") == gPrimitive.attributes.end() ) continue;
 
-            std::vector<Renderer::VertexData> vertices;
+            std::vector<Vertex> vertices;
 
             // Capture all the vertices used by the primitive
             // Looks like they're packed into a big buffer in the gltf model, with lookups from the primitive..cool!
@@ -113,8 +113,8 @@ void GLTFLoader::parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::No
 
             auto bufferStart = reinterpret_cast<const float*>(&(gModel.buffers[positionView.buffer].data[positionAccess.byteOffset + positionView.byteOffset]));
             for( auto vI = 0u; vI < positionAccess.count; ++vI ) {
-                Renderer::VertexData vert;
-                vert.vertCoord = glm::vec4(glm::make_vec3(&bufferStart[vI * positionStride]), 1.0);
+                Vertex vert;
+                vert.position = glm::vec4(glm::make_vec3(&bufferStart[vI * positionStride]), 1.0);
                 // TODO: Read the other vertex parameters, or at least whatever the renderer supports
                 vertices.emplace_back(vert);
             }
@@ -123,7 +123,7 @@ void GLTFLoader::parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::No
             if( gPrimitive.indices > -1 ) {
                 std::cerr << "WARNING: GLTFLoader: Discarding indices as renderer doesn't support them yet" << std::endl;
 
-                std::vector<Renderer::VertexData> expandedVerts;
+                std::vector<Vertex> expandedVerts;
 
                 auto& indexAccess = gModel.accessors[gPrimitive.indices];
                 auto& indexView = gModel.bufferViews[indexAccess.bufferView];
