@@ -6,9 +6,11 @@ So far models can be loaded, arranged in a scene graph, and rendered. There's al
 Right now the rendering itself is very basic - The shader interfaces are getting there but I still need to load material/texture information and implement a PBR shader or similar.
 
 # Platform Support
-Current development is being done on Linux, with NVidia/Intel GPUs
-In the past this project has built on Windows so should work fine, will probably need some tweaks to CMake as I haven't tested for a while.
-For Android the core sections should mostly work but it's hardcoded to use GLFW for now, would require significant rework.
+Most development is being done on Linux, testing on Nvidia and Intel GPUs.
+
+I'm not heavily testing on windows but everything should build, may need a few tweaks to the CMake setup now and then.
+
+For Android the core sections should mostly work but it's hardcoded to use GLFW for now, would require rework here to use the Android UI system.
 
 # Licence
 Everything is BSD 3-Clause unless specified in the file, there's some MIT and similar stuff under extern.
