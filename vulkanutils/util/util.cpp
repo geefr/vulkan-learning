@@ -119,6 +119,11 @@ void Util::ensureExtension(const std::vector<vk::ExtensionProperties>& extension
     throw std::runtime_error("Extension not supported: " + extensionName);
 }
 
+//void Util::ensureLayer(const std::vector<vk::LayerProperties>& layers, std::string layerName) {
+//  if (std::find_if(layers.begin(), layers.end(), [&](auto& e) {return layerName == e.layerName; }) == layers.end())
+//    throw std::runtime_error("Layer not supported: " + layerName);
+//}
+
 uint32_t Util::findQueue(DeviceInstance& device, vk::QueueFlags requiredFlags) {
   auto qFamProps = device.physicalDevice().getQueueFamilyProperties();
   auto it = std::find_if(qFamProps.begin(), qFamProps.end(), [&](auto& p) {

@@ -19,11 +19,16 @@ layout(location = 1) out vec3 outNormal;
 layout(location = 2) out vec2 outUV0;
 layout(location = 3) out vec2 outUV1;
 
-// TODO: Push constants vs UBOs? What's best practice?
+layout(binding = 0) uniform UBOSetPerFrame {
+  mat4 viewMatrix;
+  mat4 projectionMatrix;
+} uboPerFrame;
+
+// Frequently changing data as push constants
+// Can be updated very quickly without synchronisation
+// Upper limit of 128 bytes (Minimum available in spec)
 layout(push_constant) uniform push_matrices_t {
     mat4 model;
-    mat4 view;
-    mat4 projection;
 } matrices;
 
 void main() {
@@ -32,11 +37,11 @@ void main() {
   vec4 worldPos = matrices.model * vec4(inPosition, 1.0);
   outPosWorld = worldPos.xyz;
 
-  mat4 normalMatrix = transpose(inverse(matrices.view * matrices.model));
+  mat4 normalMatrix = transpose(inverse(uboPerFrame.viewMatrix * matrices.model));
   outNormal = (normalMatrix * vec4(inNormal, 1.0)).xyz;
 
   outUV0 = inUV0;
   outUV1 = inUV1;
 
-  gl_Position = matrices.projection * matrices.view * worldPos;
+  gl_Position = uboPerFrame.projectionMatrix * uboPerFrame.viewMatrix * worldPos;
 }

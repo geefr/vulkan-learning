@@ -58,11 +58,14 @@ void DeviceInstance::createVulkanInstance(const std::vector<const char*>& requir
 
   auto instanceLayers = enabledLayers;
 #ifdef DEBUG
-  instanceLayers.push_back("VK_LAYER_LUNARG_standard_validation");
+  // instanceLayers.push_back("VK_LAYER_LUNARG_api_dump");
+  instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
   enabledInstanceExtensions.emplace_back("VK_EXT_debug_utils");
 #endif
+
   auto numLayers = static_cast<uint32_t>(instanceLayers.size());
   for( auto& e : enabledInstanceExtensions ) Util::ensureExtension(supportedExtensions, e);
+
   auto instanceCreateInfo = vk::InstanceCreateInfo()
       .setFlags({})
       .setPApplicationInfo(&applicationInfo)
@@ -133,16 +136,12 @@ void DeviceInstance::createLogicalDevice(std::vector<vk::QueueFlags> qFlags) {
   for( auto& e : enabledDeviceExtensions ) Util::ensureExtension(supportedExtensions, e);
 #endif
 
-#ifdef DEBUG
-  uint32_t enabledLayerCount = 1;
-  const char* const enabledLayerNames[] = {
-    "VK_LAYER_LUNARG_standard_validation",
-  };
-
-#else
-  uint32_t enabledLayerCount = 0;
-  const char* const* enabledLayerNames = nullptr;
-#endif
+std::vector<const char*> enabledLayers;
+//#ifdef DEBUG
+//  enabledLayers.push_back("VK_LAYER_LUNARG_standard_validation");
+//#endif
+//  auto supportedLayers = mPhysicalDevices.front().enumerateDeviceLayerProperties();
+//  for( auto& e : enabledLayers ) Util::ensureLayer(supportedLayers, e);
 
   // The features of the physical device
   auto deviceSupportedFeatures = mPhysicalDevices.front().getFeatures();
@@ -159,8 +158,8 @@ void DeviceInstance::createLogicalDevice(std::vector<vk::QueueFlags> qFlags) {
       .setFlags({})
       .setQueueCreateInfoCount(queueInfo.size())
       .setPQueueCreateInfos(queueInfo.data())
-      .setEnabledLayerCount(enabledLayerCount)
-      .setPpEnabledLayerNames(enabledLayerNames)
+      .setEnabledLayerCount(enabledLayers.size())
+      .setPpEnabledLayerNames(enabledLayers.data())
       .setEnabledExtensionCount(static_cast<uint32_t>(enabledDeviceExtensions.size()))
       .setPpEnabledExtensionNames(enabledDeviceExtensions.data())
       .setPEnabledFeatures(&deviceRequiredFeatures)

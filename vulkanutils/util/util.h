@@ -23,6 +23,7 @@ public:
   static void printDetailedPhysicalDeviceInfo( DeviceInstance& device );
   static void printQueueFamilyProperties( std::vector<vk::QueueFamilyProperties>& props );
   static void ensureExtension(const std::vector<vk::ExtensionProperties>& extensions, std::string extensionName);
+  //static void ensureLayer(const std::vector<vk::LayerProperties>& layers, std::string layerName);
   static uint32_t findQueue(DeviceInstance& device, vk::QueueFlags requiredFlags);
 
 

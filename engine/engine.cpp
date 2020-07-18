@@ -10,71 +10,71 @@
 #include "node.h"
 
 Engine::Engine()
-	: mRend(new Renderer(*this))
-	, mNodeGraph(new Node())
-	, mQuit(false)
+  : mRend(new Renderer(*this))
+  , mNodeGraph(new Node())
+  , mQuit(false)
 {}
 
 Engine::~Engine() {}
 
 void Engine::run() {
-	initRenderer();
+  initRenderer();
 
-	mNodeGraph->init(*mRend.get());
-	mNodeGraph->upload(*mRend.get());
+  mNodeGraph->init(*mRend.get());
+  mNodeGraph->upload(*mRend.get());
 
-	mTimeStart = std::chrono::high_resolution_clock::now();
-	mTimeCurrent = mTimeStart;
+  mTimeStart = std::chrono::high_resolution_clock::now();
+  mTimeCurrent = mTimeStart;
 
-	loop();
-	cleanup();
+  loop();
+  cleanup();
 }
 
 std::shared_ptr<Node> Engine::nodegraph() { return mNodeGraph; }
 
 void Engine::initRenderer() {
-	mRend->initWindow();
-	mRend->initVK();
+  mRend->initWindow();
+  mRend->initVK();
 }
 
 void Engine::loop() {
-	while(true) {
-		// Calculate the frame time
-		std::chrono::time_point<std::chrono::high_resolution_clock> current = std::chrono::high_resolution_clock::now();
-		auto deltaT = ((double)(current - mTimeCurrent).count()) / 1.0e9;
-		mTimeCurrent = current;
-		
-		// Poll for events
-		// TODO: Just handling the window here - should poll any
-		// other input devices/systems like joysticks, VR controllers, etc
-		mEventQueue.clear();
-		// Renderer can request a quit here - TODO: Should really handle as a QuitEvent instance
-		if( !mRend->pollWindowEvents() ) break;
-		
-		// Handle explicit event callbacks (Not bound to any particular node/script)
-		callEventCallbacks();
+  while (true) {
+    // Calculate the frame time
+    std::chrono::time_point<std::chrono::high_resolution_clock> current = std::chrono::high_resolution_clock::now();
+    auto deltaT = ((double)(current - mTimeCurrent).count()) / 1.0e9;
+    mTimeCurrent = current;
 
-		// Renderer or other events may have asked us to stop rendering
-		if( mQuit ) break;
+    // Poll for events
+    // TODO: Just handling the window here - should poll any
+    // other input devices/systems like joysticks, VR controllers, etc
+    mEventQueue.clear();
+    // Renderer can request a quit here - TODO: Should really handle as a QuitEvent instance
+    if (!mRend->pollWindowEvents()) break;
 
-		// Start the frame (Let the renderer reset what it needs)
-		mRend->frameStart();
+    // Handle explicit event callbacks (Not bound to any particular node/script)
+    callEventCallbacks();
 
-		// Perform the update traversal
-		mNodeGraph->update(*this, deltaT);
+    // Renderer or other events may have asked us to stop rendering
+    if (mQuit) break;
 
-        // Render the scene
-        mNodeGraph->render(*mRend.get(), mCamera.mViewMatrix, mCamera.mProjectionMatrix);
+    // Perform the update traversal
+    mNodeGraph->update(*this, deltaT);
 
-		// Finish the frame, renderer sends commands to gpu here
-		mRend->frameEnd();
-	}
+    // Start the frame (Let the renderer reset what it needs)
+    mRend->frameStart();
+
+    // Render the scene
+    mNodeGraph->render(*mRend.get(), mCamera.mViewMatrix, mCamera.mProjectionMatrix);
+
+    // Finish the frame, renderer sends commands to gpu here
+    mRend->frameEnd();
+  }
 }
 
 void Engine::cleanup() {
-	mRend->waitIdle();
-	mNodeGraph->cleanup(*mRend.get());
-	mRend->cleanup();
+  mRend->waitIdle();
+  mNodeGraph->cleanup(*mRend.get());
+  mRend->cleanup();
 }
 
 Camera& Engine::camera() { return mCamera; }
@@ -83,15 +83,15 @@ void Engine::addEvent(std::shared_ptr<Event> e) { mEventQueue.emplace_back(e); }
 void Engine::addEvent(Event* e) { mEventQueue.emplace_back(e); }
 
 void Engine::addGlobalEventCallback(Engine::GlobalEventCallback callback) {
-	mGlobalEventCallbacks.emplace_back(callback);
+  mGlobalEventCallbacks.emplace_back(callback);
 }
 
 void Engine::callEventCallbacks() {
-	for( auto& e : mEventQueue ) {
-		for( auto& c : mGlobalEventCallbacks ) {
-			c(*this, *e.get());
-		}
-	}
+  for (auto& e : mEventQueue) {
+    for (auto& c : mGlobalEventCallbacks) {
+      c(*this, *e.get());
+    }
+  }
 }
 
 const std::list<std::shared_ptr<Event>>& Engine::events() const { return mEventQueue; }

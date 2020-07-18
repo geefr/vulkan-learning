@@ -6,20 +6,20 @@
 
 MeshNode::MeshNode()
 {
-    // TODO: This is just a dummy so we see something
-    mVertices = {
-        {{-1.0, -1.0, 0.1},{0,0,-1}},
-        {{ 1.0, -1.0, 0.1},{0,0,-1}},
-        {{ 0.0,  1.0, 0.1},{0,0,-1}},
-    };
-    mIndices = {0, 1, 2};
+  // TODO: This is just a dummy so we see something
+  mVertices = {
+      {{-1.0, -1.0, 0.1},{0,0,-1}},
+      {{ 1.0, -1.0, 0.1},{0,0,-1}},
+      {{ 0.0,  1.0, 0.1},{0,0,-1}},
+  };
+  mIndices = { 0, 1, 2 };
 }
 
 MeshNode::~MeshNode()
 {
 }
 
-MeshNode::MeshNode( const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices )
+MeshNode::MeshNode(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
   : mVertices(vertices)
   , mIndices(indices)
 {
@@ -27,23 +27,23 @@ MeshNode::MeshNode( const std::vector<Vertex>& vertices, const std::vector<uint3
 
 void MeshNode::doInit(Renderer& rend)
 {
-    mMesh.reset(new Mesh(mVertices, mIndices));
-    mVertices.clear();
-    mIndices.clear();
+  mMesh.reset(new Mesh(mVertices, mIndices));
+  mVertices.clear();
+  mIndices.clear();
 }
 
 void MeshNode::doUpload(Renderer& rend)
 {
-	if( mMesh ) mMesh->upload(rend);
+  if (mMesh) mMesh->upload(rend);
 }
 
 void MeshNode::doRender(Renderer& rend, mat4x4 nodeMat, mat4x4 viewMat, mat4x4 projMat)
 {
-    rend.renderMesh(mMesh, nodeMat, viewMat, projMat);
+  rend.renderMesh(mMesh, nodeMat);
 }
 
 void MeshNode::doCleanup(Renderer& rend) {
-  if( mMesh ) mMesh->cleanup(rend);
+  if (mMesh) mMesh->cleanup(rend);
 }
 
 void MeshNode::mesh(std::shared_ptr<Mesh> mesh) { mMesh = mesh; }

@@ -32,4 +32,5 @@ void Mesh::upload(Renderer& rend) {
 
 void Mesh::cleanup(Renderer& rend) {
   mVertexBuffer.reset();
+  mIndexBuffer.reset();
 }

@@ -18,9 +18,9 @@ struct Material
   ~Material();
   // TODO: Better docs
   enum class AlphaMode {
-    Opaque,
-    Masked,
-    Blended,
+    Opaque = 0,
+    Masked = 1,
+    Blended = 2,
   };
   AlphaMode alphaMode = AlphaMode::Opaque;
   float alphaCutOff = 1.f;

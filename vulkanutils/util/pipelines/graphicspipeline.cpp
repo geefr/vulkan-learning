@@ -196,16 +196,18 @@ void GraphicsPipeline::createPipeline() {
   // and they have to be known when the pipeline is built
   // So no randomly chucking uniforms around like we do in gl right?
   auto numPushConstantRanges = static_cast<uint32_t>(mPushConstants.size());
+  auto numDSLayouts = static_cast<uint32_t>(mDescriptorSetLayouts.size());
+  std::vector<vk::DescriptorSetLayout> tmpLayouts;
+  for (auto& p : mDescriptorSetLayouts) tmpLayouts.emplace_back(p.get());
+
   auto layoutInfo = vk::PipelineLayoutCreateInfo()
       .setFlags({})
-      .setSetLayoutCount(0)
-      .setPSetLayouts(nullptr)
+      .setSetLayoutCount(numDSLayouts)
+      .setPSetLayouts(numDSLayouts ? tmpLayouts.data() : nullptr)
       .setPushConstantRangeCount(numPushConstantRanges)
       .setPPushConstantRanges(numPushConstantRanges ? mPushConstants.data() : nullptr)
       ;
-
   mPipelineLayout = mDeviceInstance.device().createPipelineLayoutUnique(layoutInfo);
-
 
   // Finally let's make the pipeline itself
   auto pipelineInfo = vk::GraphicsPipelineCreateInfo()
