@@ -9,6 +9,7 @@
 #define SIMPLEBUFFER_H
 
 #include <vulkan/vulkan.hpp>
+#include <string>
 
 class DeviceInstance;
 
@@ -43,6 +44,9 @@ public:
   vk::Buffer& buffer();
   vk::DeviceSize size() const { return mSize; }
 
+  /// The name of the buffer - Handy if you're trying to work out which one you forgot to delete ;)
+  std::string& name();
+
 private:
   SimpleBuffer() = delete;
 
@@ -54,6 +58,7 @@ private:
   vk::MemoryPropertyFlags mMemoryPropertyFlags;
 
   bool mMapped = false;
+  std::string mName;
 };
 
 inline vk::Buffer& SimpleBuffer::buffer() { return mBuffer.get(); }

@@ -86,14 +86,14 @@ void Renderer::initVK() {
     mGraphicsPipeline->vertexInputAttributes().emplace_back(3, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, uv0));
 
     mGraphicsPipeline->addDescriptorSetLayoutBinding(0, 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics);
-    mGraphicsPipeline->addDescriptorSetLayoutBinding(0, 1, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics);
+    mGraphicsPipeline->addDescriptorSetLayoutBinding(1, 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics);
     
     // Register the push constant blocks
-    mPushConstant_matrices_range = vk::PushConstantRange()
+    mPushConstantSetRange = vk::PushConstantRange()
       .setStageFlags(vk::ShaderStageFlagBits::eVertex)
       .setOffset(0)
-      .setSize(sizeof(PushConstant_matrices));
-    mGraphicsPipeline->pushConstants().emplace_back(mPushConstant_matrices_range);
+      .setSize(sizeof(PushConstantSet));
+    mGraphicsPipeline->pushConstants().emplace_back(mPushConstantSetRange);
 
     // Finally build the pipeline
     mGraphicsPipeline->build();
@@ -115,15 +115,23 @@ void Renderer::initVK() {
     // Create fence in signalled state so first wait immediately returns and resets fence
     mFrameInFlightFences.emplace_back(mDeviceInstance->device().createFenceUnique({ vk::FenceCreateFlagBits::eSignaled }));
 
-    mUBOPerFrameInFlight.emplace_back(new SimpleBuffer(
+    std::unique_ptr<SimpleBuffer> pfUBO(new SimpleBuffer(
       *mDeviceInstance.get(),
       sizeof(UBOSetPerFrame),
       vk::BufferUsageFlagBits::eUniformBuffer));
+    pfUBO->name() = "Per-Frame UBO " + std::to_string(i);
+    mUBOPerFrameInFlight.emplace_back(std::move(pfUBO));
 
-    mUBOPerMaterialInFlight.emplace_back(new SimpleBuffer(
+    std::unique_ptr<SimpleBuffer> matUBO(new SimpleBuffer(
       *mDeviceInstance.get(),
       sizeof(UBOSetPerMaterial),
       vk::BufferUsageFlagBits::eUniformBuffer));
+    matUBO->name() = "Material UBO (Default)" + std::to_string(i);
+    Material defaultMat;
+    std::memcpy(matUBO->map(), &defaultMat, sizeof(UBOSetPerMaterial));
+    matUBO->flush();
+    matUBO->unmap();
+    mUBOPerMaterialInFlight.emplace_back(std::move(matUBO));
   }
 
   // Create descriptor sets needed to bind UBOs and such
@@ -188,27 +196,51 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   auto& pfUBO = mUBOPerFrameInFlight[frameIndex];
   std::memcpy(pfUBO->map(), &pfData, sizeof(UBOSetPerFrame));
   pfUBO->flush();
-  pfUBO->unmap();
+  pfUBO->unmap(); // TODO: Shouldn't actually being unmapping here, the buffer will stick around so this is unecesarry
 
-  for (auto& meshdata : mFrameMeshesToRender) {
-    // Set push constants
-    PushConstant_matrices mats;
-    mats.model = meshdata.modelMatrix;
+  // Iterate over the meshes we need to render
+  // TODO: This is a tad messy here - Should certainly
+  // collate the materials into one big UBO, allow
+  // meshes to dynamically add/remove from the scene etc.
+  for (auto& mesh : mFrameMeshesToRender) {
+    // Bind the descriptor set for the mesh
+    // Static mesh data such as Material, textures, etc
+    auto meshData = mMeshRenderData.find(mesh.mesh);
+    if (meshData != mMeshRenderData.end()) {
+      commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+        mGraphicsPipeline->pipelineLayout(),
+        1, 0,
+        &meshData->second.descriptorSet,
+        0, nullptr);
+    }
+    else {
+      // Bind the default material
+      commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+        mGraphicsPipeline->pipelineLayout(),
+        1, 0,
+        &mDescriptorSets[frameIndex + 1],
+        0, nullptr);
+    }
+
+    // Set push constants - Data that changes often
+    // or over time such as the model matrix
+    PushConstantSet puush;
+    puush.modelMatrix = mesh.modelMatrix;
     commandBuffer.pushConstants(
       mGraphicsPipeline->pipelineLayout(),
-      mPushConstant_matrices_range.stageFlags,
-      mPushConstant_matrices_range.offset,
-      sizeof(PushConstant_matrices),
-      &mats);
+      mPushConstantSetRange.stageFlags,
+      mPushConstantSetRange.offset,
+      sizeof(PushConstantSet),
+      &puush);
 
     // Set vertex buffer
-    auto& vertBuf = meshdata.mesh->mVertexBuffer;
-    // TODO: Probably not efficient - Could batch multiple buffers/offsets here
+    auto& vertBuf = mesh.mesh->mVertexBuffer;
+    // TODO: Probably not efficient - Should batch multiple buffers/offsets here, probably based on shared materials
     vk::Buffer buffers[] = { vertBuf->buffer() };
     vk::DeviceSize offsets[] = { 0 };
     commandBuffer.bindVertexBuffers(0, 1, buffers, offsets);
 
-    auto& idxBuf = meshdata.mesh->mIndexBuffer;
+    auto& idxBuf = mesh.mesh->mIndexBuffer;
     // If there's no index buffer just draw all the vertices
     if (!idxBuf) {
       commandBuffer.draw(static_cast<uint32_t>(vertBuf->size() / sizeof(Vertex)), // Draw n vertices
@@ -237,27 +269,31 @@ void Renderer::createDescriptorSets() {
   // Create a descriptor pool, to allocate descriptor sets from
   // per-frame and per-material descriptor sets
   auto numDescriptorsPerFrame = 2u;
+  auto maxMeshDescriptors = 1000u;
   auto poolSize = vk::DescriptorPoolSize()
     .setType(vk::DescriptorType::eStorageBuffer)
-    .setDescriptorCount(mMaxFramesInFlight * numDescriptorsPerFrame);
+    .setDescriptorCount((mMaxFramesInFlight * numDescriptorsPerFrame) + maxMeshDescriptors);
 
   auto poolInfo = vk::DescriptorPoolCreateInfo()
     .setFlags({})
-    .setMaxSets(mMaxFramesInFlight)
+    .setMaxSets(mMaxFramesInFlight * 2)
     .setPoolSizeCount(1)
     .setPPoolSizes(&poolSize);
   mDescriptorPool = mDeviceInstance->device().createDescriptorPoolUnique(poolInfo);
 
   // Create the descriptor sets, one for each UBO
   for (auto i = 0u; i < mMaxFramesInFlight; ++i) {
-    const vk::DescriptorSetLayout dsLayouts[] = { mGraphicsPipeline->descriptorSetLayouts()[0].get() };
-    auto dsInfo = vk::DescriptorSetAllocateInfo()
-      .setDescriptorPool(mDescriptorPool.get())
-      .setDescriptorSetCount(1)
-      .setPSetLayouts(dsLayouts);
+    // TODO: This is a complete mess now - Should pull descriptor sets down to vulkanutils and make it a bit more sane
+    for( auto j = 0u; j < 2; ++j ) {
+      const vk::DescriptorSetLayout dsLayouts[] = { mGraphicsPipeline->descriptorSetLayouts()[j].get() };
+      auto dsInfo = vk::DescriptorSetAllocateInfo()
+        .setDescriptorPool(mDescriptorPool.get())
+        .setDescriptorSetCount(1)
+        .setPSetLayouts(dsLayouts);
 
-    auto sets = mDeviceInstance->device().allocateDescriptorSets(dsInfo);
-    mDescriptorSets.emplace_back(std::move(sets.front()));
+      auto sets = mDeviceInstance->device().allocateDescriptorSets(dsInfo);
+      mDescriptorSets.emplace_back(std::move(sets.front()));
+    }
   }
 
   for (auto i = 0u; i < mMaxFramesInFlight; ++i) {
@@ -272,6 +308,26 @@ void Renderer::createDescriptorSets() {
       .setRange(VK_WHOLE_SIZE);
     uInfos.emplace_back(uInfo1);
 
+    auto wInfo = vk::WriteDescriptorSet()
+      .setDstSet(mDescriptorSets[i * 2])
+      .setDstBinding(0)
+      .setDstArrayElement(0)
+      .setDescriptorCount(static_cast<uint32_t>(uInfos.size()))
+      .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+      .setPImageInfo(nullptr)
+      .setPBufferInfo(uInfos.data())
+      .setPTexelBufferView(nullptr);
+
+    mDeviceInstance->device().updateDescriptorSets(1, &wInfo, 0, nullptr);
+  }
+
+  for (auto i = 0u; i < mMaxFramesInFlight; ++i) {
+    auto& uboPerFrame = mUBOPerFrameInFlight[i];
+    auto& uboPerMat = mUBOPerMaterialInFlight[i];
+
+    // Update the descriptor set to map to the buffers
+    std::vector<vk::DescriptorBufferInfo> uInfos;
+
     auto uInfo2 = vk::DescriptorBufferInfo()
       .setBuffer(uboPerMat->buffer())
       .setOffset(0)
@@ -279,7 +335,7 @@ void Renderer::createDescriptorSets() {
     uInfos.emplace_back(uInfo2);
 
     auto wInfo = vk::WriteDescriptorSet()
-      .setDstSet(mDescriptorSets[i])
+      .setDstSet(mDescriptorSets[(i * 2) + 1])
       .setDstBinding(0)
       .setDstArrayElement(0)
       .setDescriptorCount(static_cast<uint32_t>(uInfos.size()))
@@ -292,8 +348,84 @@ void Renderer::createDescriptorSets() {
   }
 }
 
-void Renderer::renderMesh(std::shared_ptr<Mesh> mesh, glm::mat4x4 modelMat) {
+void Renderer::createDescriptorSetForMesh(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material) {
+  auto meshData = mMeshRenderData.find(mesh);
+  if (meshData != mMeshRenderData.end()) return;
+
+  // The mesh hasn't been seen before
+  // Create the necesarry descriptor set
+  // TODO: For now these will never be cleared up, so we'll leak resources
+  // when rendering dynamic scenes with lots of added/removed meshes
+  MeshRenderData d;
+
+  // Setup the UBO, to contain material info
+  UBOSetPerMaterial mat;
+  mat.alphaCutOff = material->alphaCutOff;
+  mat.baseColourFactor = material->baseColourFactor;
+  mat.diffuseFactor = material->diffuseFactor;
+  mat.emissiveFactor = material->emissiveFactor;
+  mat.specularFactor = material->specularFactor;
+  
+  d.uboMaterial.reset(new SimpleBuffer(
+    *mDeviceInstance.get(),
+    sizeof(UBOSetPerMaterial),
+    vk::BufferUsageFlagBits::eUniformBuffer)
+  );
+  d.uboMaterial->name() = "Mesh Material UBO";
+
+  std::memcpy(d.uboMaterial->map(), &mat, sizeof(UBOSetPerMaterial));
+  d.uboMaterial->flush();
+  d.uboMaterial->unmap();
+
+  const vk::DescriptorSetLayout dsLayouts[] = { mGraphicsPipeline->descriptorSetLayouts()[1].get() };
+  auto dsInfo = vk::DescriptorSetAllocateInfo()
+    .setDescriptorPool(mDescriptorPool.get())
+    .setDescriptorSetCount(1)
+    .setPSetLayouts(dsLayouts);
+
+  try {
+    auto sets = mDeviceInstance->device().allocateDescriptorSets(dsInfo);
+    d.descriptorSet = std::move(sets.front());
+  }
+  catch (vk::OutOfPoolMemoryError& e) {
+    // Explicit check as the pool has a limit
+    // TODO: Could auto-scale and make more pools, or free up
+    // resources and try again?
+    // For now just report the issue and we'll have missing textures
+    // or something (TODO: Like all good engines we should have a default material for missing textures)
+    // TODO TODO: We'll run out really quickly unless the materials are merged - Initially it's
+    // one descriptor per mesh, and a scene could have a lot in it!
+    std::cerr << "Renderer::createDescriptorSet: Ran out of space in descriptor pool" << std::endl;
+    return;
+  }
+  
+  // Update the descriptor set to map to the buffers
+  std::vector<vk::DescriptorBufferInfo> uInfos;
+  auto uInfo1 = vk::DescriptorBufferInfo()
+    .setBuffer(d.uboMaterial->buffer())
+    .setOffset(0)
+    .setRange(VK_WHOLE_SIZE);
+  uInfos.emplace_back(uInfo1);
+
+  auto wInfo = vk::WriteDescriptorSet()
+    .setDstSet(d.descriptorSet)
+    .setDstBinding(0)
+    .setDstArrayElement(0)
+    .setDescriptorCount(static_cast<uint32_t>(uInfos.size()))
+    .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+    .setPImageInfo(nullptr)
+    .setPBufferInfo(uInfos.data())
+    .setPTexelBufferView(nullptr);
+
+  mDeviceInstance->device().updateDescriptorSets(1, &wInfo, 0, nullptr);
+
+  mMeshRenderData[mesh] = std::move(d);
+}
+
+void Renderer::renderMesh(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material, glm::mat4x4 modelMat) {
   if (!mesh) return;
+  if( !material ) material.reset(new Material());
+
   // Note that we need to render the mesh, frameEnd will
   // submit this to the gpu as needed
   MeshRenderInstance i;
@@ -301,6 +433,8 @@ void Renderer::renderMesh(std::shared_ptr<Mesh> mesh, glm::mat4x4 modelMat) {
   i.modelMatrix = modelMat;
 
   mFrameMeshesToRender.emplace_back(i);
+
+  createDescriptorSetForMesh(mesh, material);
 }
 
 bool Renderer::pollWindowEvents() {
@@ -327,80 +461,91 @@ void Renderer::frameStart() {
 }
 
 void Renderer::frameEnd() {
-  auto frameIndex = 0u;
+  // Important that we catch any vulkan errors here - it's the most likely location
+  // vulkan.hpp throws exceptions by default, in release they might be disabled by CMake
+  try
+  {
+    auto frameIndex = 0u;
 
-  static std::once_flag windowShown;
-  std::call_once(windowShown, [&win = mWindow]() {glfwShowWindow(win); });
+    static std::once_flag windowShown;
+    std::call_once(windowShown, [&win = mWindow]() {glfwShowWindow(win); });
 
-  // Wait for the last frame to finish rendering
-  mDeviceInstance->device().waitForFences(1, &mFrameInFlightFences[frameIndex].get(), true, std::numeric_limits<uint64_t>::max());
+    // Wait for the last frame to finish rendering
+    mDeviceInstance->device().waitForFences(1, &mFrameInFlightFences[frameIndex].get(), true, std::numeric_limits<uint64_t>::max());
 
-  // Advance to next frame index, loop at max
-  frameIndex++;
-  if (frameIndex == mMaxFramesInFlight) frameIndex = 0;
+    // Advance to next frame index, loop at max
+    frameIndex++;
+    if (frameIndex == mMaxFramesInFlight) frameIndex = 0;
 
-  // Reset the fence - fences must be reset before being submitted
-  auto frameFence = mFrameInFlightFences[frameIndex].get();
-  mDeviceInstance->device().resetFences(1, &frameFence);
+    // Reset the fence - fences must be reset before being submitted
+    auto frameFence = mFrameInFlightFences[frameIndex].get();
+    mDeviceInstance->device().resetFences(1, &frameFence);
 
-  // Acquire and image from the swap chain
-  auto imageIndex = mDeviceInstance->device().acquireNextImageKHR(
-    mWindowIntegration->swapChain(), // Get an image from this
-    std::numeric_limits<uint64_t>::max(), // Don't timeout
-    mImageAvailableSemaphores[frameIndex].get(), // semaphore to signal once presentation is finished with the image
-    vk::Fence()).value; // Dummy fence, we don't care here
+    // Acquire and image from the swap chain
+    auto imageIndex = mDeviceInstance->device().acquireNextImageKHR(
+      mWindowIntegration->swapChain(), // Get an image from this
+      std::numeric_limits<uint64_t>::max(), // Don't timeout
+      mImageAvailableSemaphores[frameIndex].get(), // semaphore to signal once presentation is finished with the image
+      vk::Fence()).value; // Dummy fence, we don't care here
 
-// Submit the command buffer
-  vk::SubmitInfo submitInfo = {};
-  auto commandBuffer = mCommandBuffers[imageIndex].get();
-  auto frameBuffer = mFrameBuffer->frameBuffers()[imageIndex].get();
+  // Submit the command buffer
+    vk::SubmitInfo submitInfo = {};
+    auto commandBuffer = mCommandBuffers[imageIndex].get();
+    auto frameBuffer = mFrameBuffer->frameBuffers()[imageIndex].get();
 
-  // Rebuild the command buffer every frame
-  // This isn't the most efficient but we're at least re-using the command buffer
-  // In a most complex application we would have multiple command buffers and only rebuild
-  // the section that needs changing..I think
-  buildCommandBuffer(commandBuffer, frameBuffer, frameIndex);
+    // Rebuild the command buffer every frame
+    // This isn't the most efficient but we're at least re-using the command buffer
+    // In a most complex application we would have multiple command buffers and only rebuild
+    // the section that needs changing..I think
+    buildCommandBuffer(commandBuffer, frameBuffer, frameIndex);
 
-  // Don't execute until this is ready
-  vk::Semaphore waitSemaphores[] = { mImageAvailableSemaphores[frameIndex].get() };
-  // place the wait before writing to the colour attachment
+    // Don't execute until this is ready
+    vk::Semaphore waitSemaphores[] = { mImageAvailableSemaphores[frameIndex].get() };
+    // place the wait before writing to the colour attachment
 
-  // If we have render pass depedencies
-  vk::PipelineStageFlags waitStages[]{ vk::PipelineStageFlagBits::eColorAttachmentOutput };
+    // If we have render pass depedencies
+    vk::PipelineStageFlags waitStages[]{ vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
-  // Otherwise wait until the pipeline starts to allow reading?
-  //vk::PipelineStageFlags waitStages[] {vk::PipelineStageFlagBits::eTopOfPipe};
+    // Otherwise wait until the pipeline starts to allow reading?
+    //vk::PipelineStageFlags waitStages[] {vk::PipelineStageFlagBits::eTopOfPipe};
 
 
-  // Signal this semaphore when rendering is done
-  vk::Semaphore signalSemaphores[] = { mRenderFinishedSemaphores[frameIndex].get() };
-  submitInfo.setWaitSemaphoreCount(1)
-    .setPWaitSemaphores(waitSemaphores)
-    .setPWaitDstStageMask(waitStages)
-    .setCommandBufferCount(1)
-    .setPCommandBuffers(&commandBuffer)
-    .setSignalSemaphoreCount(1)
-    .setPSignalSemaphores(signalSemaphores)
-    ;
+    // Signal this semaphore when rendering is done
+    vk::Semaphore signalSemaphores[] = { mRenderFinishedSemaphores[frameIndex].get() };
+    submitInfo.setWaitSemaphoreCount(1)
+      .setPWaitSemaphores(waitSemaphores)
+      .setPWaitDstStageMask(waitStages)
+      .setCommandBufferCount(1)
+      .setPCommandBuffers(&commandBuffer)
+      .setSignalSemaphoreCount(1)
+      .setPSignalSemaphores(signalSemaphores)
+      ;
 
-  vk::ArrayProxy<vk::SubmitInfo> submits(submitInfo);
-  // submit, signal the frame fence at the end
-  mQueue->queue.submit(submits.size(), submits.data(), frameFence);
+    vk::ArrayProxy<vk::SubmitInfo> submits(submitInfo);
+    // submit, signal the frame fence at the end
+    mQueue->queue.submit(submits.size(), submits.data(), frameFence);
 
-  // Present the results of a frame to the swap chain
-  vk::SwapchainKHR swapChains[] = { mWindowIntegration->swapChain() };
-  vk::PresentInfoKHR presentInfo = {};
-  presentInfo.setWaitSemaphoreCount(1)
-    .setPWaitSemaphores(signalSemaphores) // Wait before presentation can start
-    .setSwapchainCount(1)
-    .setPSwapchains(swapChains)
-    .setPImageIndices(&imageIndex)
-    .setPResults(nullptr)
-    ;
+    // Present the results of a frame to the swap chain
+    vk::SwapchainKHR swapChains[] = { mWindowIntegration->swapChain() };
+    vk::PresentInfoKHR presentInfo = {};
+    presentInfo.setWaitSemaphoreCount(1)
+      .setPWaitSemaphores(signalSemaphores) // Wait before presentation can start
+      .setSwapchainCount(1)
+      .setPSwapchains(swapChains)
+      .setPImageIndices(&imageIndex)
+      .setPResults(nullptr)
+      ;
 
-  // TODO: Currently using a single queue for both graphics and present
-  // Some systems may not be able to support this
-  mQueue->queue.presentKHR(presentInfo);
+    // TODO: Currently using a single queue for both graphics and present
+    // Some systems may not be able to support this
+    mQueue->queue.presentKHR(presentInfo);
+  }
+  catch (vk::Error& e) {
+    std::cerr << "Renderer::frameEnd: vk::Error: " << e.what() << std::endl;
+  }
+  catch (...) {
+    std::cerr << "Renderer::frameEnd: Unknown Exception:" << std::endl;
+  }
 }
 
 void Renderer::waitIdle() {
@@ -421,6 +566,7 @@ void Renderer::cleanup() {
 
   mUBOPerFrameInFlight.clear();
   mUBOPerMaterialInFlight.clear();
+  mMeshRenderData.clear();
 
   mFrameInFlightFences.clear();
   mRenderFinishedSemaphores.clear();
@@ -446,6 +592,7 @@ std::unique_ptr<SimpleBuffer> Renderer::createSimpleVertexBuffer(std::vector<Ver
     *mDeviceInstance.get(),
     verts.size() * sizeof(decltype(verts)::value_type),
     vk::BufferUsageFlagBits::eVertexBuffer));
+  result->name() = "Renderer::createSimpleVertexBuffer";
   return result;
 }
 
@@ -454,5 +601,6 @@ std::unique_ptr<SimpleBuffer> Renderer::createSimpleIndexBuffer(std::vector<uint
     *mDeviceInstance.get(),
     indices.size() * sizeof(decltype(indices)::value_type),
     vk::BufferUsageFlagBits::eIndexBuffer));
+  result->name() = "Renderer::createSimpleIndexBuffer";
   return result;
 }

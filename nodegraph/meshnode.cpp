@@ -39,7 +39,7 @@ void MeshNode::doUpload(Renderer& rend)
 
 void MeshNode::doRender(Renderer& rend, mat4x4 nodeMat, mat4x4 viewMat, mat4x4 projMat)
 {
-  rend.renderMesh(mMesh, nodeMat);
+  rend.renderMesh(mMesh, mMaterial, nodeMat);
 }
 
 void MeshNode::doCleanup(Renderer& rend) {

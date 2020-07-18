@@ -47,3 +47,5 @@ void SimpleBuffer::unmap() {
 void SimpleBuffer::flush() {
    mDeviceInstance.flushMemoryRanges({vk::MappedMemoryRange(mDeviceMemory.get(), 0, VK_WHOLE_SIZE)});
 }
+
+std::string& SimpleBuffer::name() { return mName; }

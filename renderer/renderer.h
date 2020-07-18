@@ -57,14 +57,20 @@ public:
 
   /// Per-Material/Mesh uniforms, Binding = 1
   struct UBOSetPerMaterial {
-    // TODO
+    glm::vec4 baseColourFactor;
+    glm::vec4 emissiveFactor;
+    glm::vec4 diffuseFactor;
+    glm::vec3 specularFactor;
+    float alphaCutOff;
+    // TODO: And magically we're 16-byte aligned
+    // When adding more data be careful here
   };
 
   /// Push constants for the most frequently changing data
   /// @note Size must be multiple of 4 here, renderer doesn't check size
   /// @note Limit of 128 bytes - Minimum capacity required by spec
-  struct PushConstant_matrices {
-    glm::mat4x4 model;
+  struct PushConstantSet {
+    glm::mat4x4 modelMatrix;
   };
 
   /**
@@ -77,7 +83,7 @@ public:
    * Render a mesh (submit it to the render pipeline)
    * Called by any mesh nodes in the node graph during the render traversal
    */
-  void renderMesh( std::shared_ptr<Mesh> mesh, glm::mat4x4 modelMat );
+  void renderMesh( std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material, glm::mat4x4 modelMat );
 
   void initWindow();
   void initVK();
@@ -101,6 +107,7 @@ public:
 private:
   void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer, uint32_t frameIndex);
   void createDescriptorSets();
+  void createDescriptorSetForMesh(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material);
 
   // Reference to the Engine, used to pass back window events/other renderer specific actions
   Engine& mEngine;
@@ -137,17 +144,24 @@ private:
   std::vector<std::unique_ptr<SimpleBuffer>> mUBOPerMaterialInFlight;
 
   // Push constants can be updated at any point however
-  vk::PushConstantRange mPushConstant_matrices_range;
+  vk::PushConstantRange mPushConstantSetRange;
 
   // Members used to track data during the nodegraph traversal
   // render will happen once this is populated
-  glm::mat4x4 mViewMatrix;
-  glm::mat4x4 mProjectionMatrix;
+  glm::mat4x4 mViewMatrix = glm::mat4x4(1.0f);
+  glm::mat4x4 mProjectionMatrix = glm::mat4x4(1.0f);
+
   struct MeshRenderInstance {
     std::shared_ptr<Mesh> mesh;
     glm::mat4x4 modelMatrix;
   };
   std::list<MeshRenderInstance> mFrameMeshesToRender;
+
+  struct MeshRenderData {
+    vk::DescriptorSet descriptorSet;
+    std::unique_ptr<SimpleBuffer> uboMaterial;
+  };
+  std::map<std::shared_ptr<Mesh>, MeshRenderData> mMeshRenderData;
 };
 
 #endif

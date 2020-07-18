@@ -39,35 +39,44 @@ void Engine::initRenderer() {
 
 void Engine::loop() {
   while (true) {
-    // Calculate the frame time
-    std::chrono::time_point<std::chrono::high_resolution_clock> current = std::chrono::high_resolution_clock::now();
-    auto deltaT = ((double)(current - mTimeCurrent).count()) / 1.0e9;
-    mTimeCurrent = current;
+    try {
+      // Calculate the frame time
+      std::chrono::time_point<std::chrono::high_resolution_clock> current = std::chrono::high_resolution_clock::now();
+      auto deltaT = ((double)(current - mTimeCurrent).count()) / 1.0e9;
+      mTimeCurrent = current;
 
-    // Poll for events
-    // TODO: Just handling the window here - should poll any
-    // other input devices/systems like joysticks, VR controllers, etc
-    mEventQueue.clear();
-    // Renderer can request a quit here - TODO: Should really handle as a QuitEvent instance
-    if (!mRend->pollWindowEvents()) break;
+      // Poll for events
+      // TODO: Just handling the window here - should poll any
+      // other input devices/systems like joysticks, VR controllers, etc
+      mEventQueue.clear();
+      // Renderer can request a quit here - TODO: Should really handle as a QuitEvent instance
+      if (!mRend->pollWindowEvents()) break;
 
-    // Handle explicit event callbacks (Not bound to any particular node/script)
-    callEventCallbacks();
+      // Handle explicit event callbacks (Not bound to any particular node/script)
+      callEventCallbacks();
 
-    // Renderer or other events may have asked us to stop rendering
-    if (mQuit) break;
+      // Renderer or other events may have asked us to stop rendering
+      if (mQuit) break;
 
-    // Perform the update traversal
-    mNodeGraph->update(*this, deltaT);
+      // Perform the update traversal
+      mNodeGraph->update(*this, deltaT);
 
-    // Start the frame (Let the renderer reset what it needs)
-    mRend->frameStart();
+      // Start the frame (Let the renderer reset what it needs)
+      mRend->frameStart();
 
-    // Render the scene
-    mNodeGraph->render(*mRend.get(), mCamera.mViewMatrix, mCamera.mProjectionMatrix);
+      // Render the scene
+      mNodeGraph->render(*mRend.get(), mCamera.mViewMatrix, mCamera.mProjectionMatrix);
 
-    // Finish the frame, renderer sends commands to gpu here
-    mRend->frameEnd();
+      // Finish the frame, renderer sends commands to gpu here
+      mRend->frameEnd();
+    }
+    catch (...) {
+      // Something went wrong, we don't know what but
+      // it's critical that we unwind the renderer's resources properly
+      cleanup();
+      // And just forward the error to whoever is listening
+      throw;
+    }
   }
 }
 

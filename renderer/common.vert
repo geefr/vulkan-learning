@@ -24,6 +24,14 @@ layout(binding = 0) uniform UBOSetPerFrame {
   mat4 projectionMatrix;
 } uboPerFrame;
 
+layout(binding = 1) uniform UBOSetMaterial {
+  vec4 baseColourFactor;
+  vec4 emissiveFactor;
+  vec4 diffuseFactor;
+  vec3 specularFactor;
+  float alphaCutOff;
+} uboMaterial;
+
 // Frequently changing data as push constants
 // Can be updated very quickly without synchronisation
 // Upper limit of 128 bytes (Minimum available in spec)

@@ -33,6 +33,10 @@ endif()
 # Package/System requirements
 find_package(Vulkan REQUIRED)
 
+if( NOT CMAKE_BUILD_TYPE MATCHES "Debug" )
+  add_compile_definitions(VULKAN_HPP_NO_EXCEPTIONS)
+endif()
+
 # This is a little ugly but will work
 if(NOT EXISTS "${glslCompiler}")
   set( glslCompiler "${Vulkan_INCLUDE_DIR}/../bin/${glslCompilerName}")
