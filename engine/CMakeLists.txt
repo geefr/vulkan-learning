@@ -5,6 +5,7 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/vulkanutils
     ${PROJECT_SOURCE_DIR}/renderer
     ${PROJECT_SOURCE_DIR}/nodegraph
+		${PROJECT_SOURCE_DIR}/extern/tinygltf
 )
 
 add_library( ${targetName} ${LIB_TYPE}
@@ -14,10 +15,13 @@ add_library( ${targetName} ${LIB_TYPE}
 	event.cpp
 	camera.h
 	camera.cpp
-        vertex.h
+  vertex.h
 	mesh.h
-        mesh.cpp
+  mesh.cpp
 	material.h
+	material.cpp
+	loaders/gltfloader.h
+	loaders/gltfloader.cpp
 )
 target_link_libraries( ${targetName} renderer nodegraph )
 

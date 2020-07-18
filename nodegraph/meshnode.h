@@ -12,28 +12,34 @@
 
 #include "renderer.h"
 #include "vertex.h"
+#include "material.h"
 
-/**
- * A node which renders a mesh
- */
+ /**
+  * A node which renders a mesh
+  */
 class MeshNode : public Node
 {
 public:
-    MeshNode();
-    MeshNode( const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices );
-	virtual ~MeshNode();
+  MeshNode();
+  MeshNode(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
+  virtual ~MeshNode();
 
-	// Render this node and any children
-	void doInit(Renderer& rend) override;
-	void doUpload(Renderer& rend) override;
-	void doRender(Renderer& rend, mat4x4 nodeMat, mat4x4 viewMat, mat4x4 projMat) override;
-	void doCleanup(Renderer& rend) override;
+  // Render this node and any children
+  void doInit(Renderer& rend) override;
+  void doUpload(Renderer& rend) override;
+  void doRender(Renderer& rend, mat4x4 nodeMat, mat4x4 viewMat, mat4x4 projMat) override;
+  void doCleanup(Renderer& rend) override;
+
+  void mesh(std::shared_ptr<Mesh> mesh);
+  void material(std::shared_ptr<Material> mat);
 private:
-    std::shared_ptr<Mesh> mMesh;
+  std::shared_ptr<Mesh> mMesh;
+  std::shared_ptr<Material> mMaterial;
+  // std::vector<std::shared_ptr<Texture>> mTextures;
 
     // Cleared when mesh is created/uploaded
-    std::vector<Vertex> mVertices;
-    std::vector<uint32_t> mIndices;
+  std::vector<Vertex> mVertices;
+  std::vector<uint32_t> mIndices;
 };
 
 #endif

@@ -45,3 +45,6 @@ void MeshNode::doRender(Renderer& rend, mat4x4 nodeMat, mat4x4 viewMat, mat4x4 p
 void MeshNode::doCleanup(Renderer& rend) {
   if( mMesh ) mMesh->cleanup(rend);
 }
+
+void MeshNode::mesh(std::shared_ptr<Mesh> mesh) { mMesh = mesh; }
+void MeshNode::material(std::shared_ptr<Material> mat) { mMaterial = mat; }

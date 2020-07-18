@@ -51,13 +51,15 @@ std::shared_ptr<Node> GLTFLoader::load(std::string fileName) {
     // Parse the gltf node and create one of ours
     auto& gNode = gltfModel.nodes[scene.nodes[gltfNodeID]];
 
-    parseGltfNode(root, gNode, gltfModel);
+    auto materials = parseGltfMaterials(gltfModel);
+
+    parseGltfNode(root, gNode, gltfModel, materials);
   }
 
   return root;
 }
 
-void GLTFLoader::parseGltfNode(std::shared_ptr<Node> targetParent, tinygltf::Node& gNode, tinygltf::Model& gModel) {
+void GLTFLoader::parseGltfNode(std::shared_ptr<Node> targetParent, tinygltf::Node& gNode, tinygltf::Model& gModel, std::vector<std::shared_ptr<Material>> materials) {
 
   std::shared_ptr<Node> n(new Node());
 
@@ -74,7 +76,7 @@ void GLTFLoader::parseGltfNode(std::shared_ptr<Node> targetParent, tinygltf::Nod
 
   // Handle children of the gltf node
   for (auto& gChild : gNode.children) {
-    parseGltfNode(n, gModel.nodes[gChild], gModel);
+    parseGltfNode(n, gModel.nodes[gChild], gModel, materials);
   }
 
   // Parse mesh data
@@ -138,6 +140,12 @@ void GLTFLoader::parseGltfNode(std::shared_ptr<Node> targetParent, tinygltf::Nod
       }
 
       std::shared_ptr<MeshNode> mesh(new MeshNode(vertices, indices));
+
+      if (gPrimitive.material > -1 && gPrimitive.material < materials.size()) {
+        auto mat = materials[gPrimitive.material];
+        mesh->material( mat );
+      }
+
       n->children().emplace_back(mesh);
     }
   }
@@ -162,4 +170,75 @@ std::tuple<const float*, size_t, size_t> GLTFLoader::getFloatBuffer(std::string 
 
   auto buffer = reinterpret_cast<const float*>(&(gModel.buffers[view.buffer].data[access.byteOffset + view.byteOffset]));
   return {buffer, access.count, stride};
+} 
+
+std::vector<std::shared_ptr<Material>> GLTFLoader::parseGltfMaterials(tinygltf::Model& gModel) {
+  std::vector<std::shared_ptr<Material>> mats;
+  for( auto& gMat : gModel.materials ) {
+    std::shared_ptr<Material> mat(new Material());
+    // TODO: Texture support in engine
+    /*auto baseColorTex = gMat.values.find("baseColorTexture");
+    if( baseColorTex != gMat.values.end() ) {
+      mat.baseColourTex
+    }*/
+    // metallicRoughnessTexture
+    // normalTexture, mat.additionalValues
+    // emissiveTexture, mat.additionalValues
+    // occlusionTexture, mat.additionalValues
+
+    auto roughnessFactor = gMat.values.find("roughnessFactor");
+    if( roughnessFactor != gMat.values.end() ) mat->roughnessFactor = static_cast<float>(roughnessFactor->second.Factor());
+
+    auto metallicFactor = gMat.values.find("metallicFactor");
+    if( metallicFactor != gMat.values.end() ) mat->metallicFactor = static_cast<float>(metallicFactor->second.Factor());
+
+    auto baseColorFactor = gMat.values.find("baseColorFactor");
+    if( baseColorFactor != gMat.values.end() ) mat->baseColourFactor = glm::make_vec4(baseColorFactor->second.ColorFactor().data());
+
+    auto alphaMode = gMat.additionalValues.find("alphaMode");
+    if (alphaMode != gMat.additionalValues.end()) {
+      const auto& alphaString = alphaMode->second.string_value;
+      if(alphaString == "BLEND") mat->alphaMode = Material::AlphaMode::Blended;
+      else if (alphaString == "MASK") {
+        mat->alphaMode = Material::AlphaMode::Masked;
+        mat->alphaCutOff = 0.5f;
+      }
+    }
+    auto alphaCutoff = gMat.additionalValues.find("alphaCutoff");
+    if( alphaCutoff != gMat.additionalValues.end() ) mat->alphaCutOff = static_cast<float>(alphaCutoff->second.Factor());
+
+    auto emissiveFactor = gMat.additionalValues.find("emissiveFactor");
+    if( emissiveFactor != gMat.additionalValues.end() ) mat->emissiveFactor = glm::vec4(glm::make_vec3(emissiveFactor->second.ColorFactor().data()), 1.0);
+
+    // TODO: Yeah so as Sascha notes this bit is a little ugly, should sort out what we really need
+    // Will really depend on sophistication of the shader pipeline as to what gets used there
+    auto specGlossExtIt = gMat.extensions.find("KHR_materials_pbrSpecularGlossiness");
+    if (specGlossExtIt != gMat.extensions.end()) {
+      auto specGlossExt = specGlossExtIt->second;
+      if (specGlossExt.Has("specularGlossinessTexture")) {
+        // TODO: Reading of textures from GLTF
+      }
+      if (specGlossExt.Has("diffuseTexture")) {
+        // TODO: Reading of textures from GLTF
+      }
+      if (specGlossExt.Has("diffuseFactor")) {
+        auto factor = specGlossExt.Get("diffuseFactor");
+        for (auto i = 0; i < factor.ArrayLen(); ++i) {
+          auto val = factor.Get(i);
+          mat->diffuseFactor[i] = val.IsNumber() ? static_cast<float>(val.Get<double>()) : static_cast<float>(val.Get<int>());
+        }
+      }
+      if (specGlossExt.Has("specularFactor")) {
+        auto factor = specGlossExt.Get("specularFactor");
+        for (auto i = 0; i < factor.ArrayLen(); ++i) {
+          auto val = factor.Get(i);
+          mat->specularFactor[i] = val.IsNumber() ? static_cast<float>(val.Get<double>()) : static_cast<float>(val.Get<int>());
+        }
+      }
+    }
+
+    mats.emplace_back(mat);
+  }
+
+  return mats;
 }

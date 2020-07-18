@@ -10,6 +10,9 @@
 
 #include <string>
 #include <memory>
+#include <vector>
+
+#include "material.h"
 
 class Node;
 namespace tinygltf {
@@ -27,10 +30,12 @@ class GLTFLoader {
 public:
   static std::shared_ptr<Node> load(std::string fileName);
 private:
-  static void parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::Node& gNode, tinygltf::Model& gModel );
+  static void parseGltfNode( std::shared_ptr<Node> targetParent, tinygltf::Node& gNode, tinygltf::Model& gModel, std::vector<std::shared_ptr<Material>> materials);
   /// @return <pointer to start of buffer, num elements in buffer, buffer stride per element>
   static std::tuple<const float*, size_t, size_t> getFloatBuffer(std::string attribute, uint32_t defaultSize, 
                                                       tinygltf::Model& gModel, tinygltf::Primitive& gPrimitive);
+  /// Load materials from the gltf file, convert to our format
+  static std::vector<std::shared_ptr<Material>> parseGltfMaterials(tinygltf::Model& gModel);
 
 };
 

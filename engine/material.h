@@ -10,26 +10,29 @@
 
 #include <glm/glm.hpp>
 
-/// Material definition, based on glTF concepts
-/// See Material struct - https://github.com/SaschaWillems/Vulkan-glTF-PBR/blob/master/base/VulkanglTFModel.hpp
+ /// Material definition, based on glTF concepts
+ /// See Material struct - https://github.com/SaschaWillems/Vulkan-glTF-PBR/blob/master/base/VulkanglTFModel.hpp
 struct Material
 {
-    // TODO: Better docs
-    enum class AlphaMode {
-        Opaque,
-        Masked,
-        Blended,
-    };
-    float alphaCutOff = 1.f;
-    float metallicFactor = 1.f;
-    float roughnessFactor = 1.f;
-    glm::vec4 baseColourFactor = {1.f,1.f,1.f,1.f};
-    glm::vec4 emissiveFactor = {1.f,1.f,1.f,1.f};
-    glm::vec4 diffuseFactor = {1.f,1.f,1.f,1.f};
-    glm::vec3 specularFactor = {1.f,1.f,1.f};
+  Material();
+  ~Material();
+  // TODO: Better docs
+  enum class AlphaMode {
+    Opaque,
+    Masked,
+    Blended,
+  };
+  AlphaMode alphaMode = AlphaMode::Opaque;
+  float alphaCutOff = 1.f;
+  float metallicFactor = 1.f;
+  float roughnessFactor = 1.f;
+  glm::vec4 baseColourFactor = { 1.f,1.f,1.f,1.f };
+  glm::vec4 emissiveFactor = { 1.f,1.f,1.f,1.f };
+  glm::vec4 diffuseFactor = { 1.f,1.f,1.f,1.f };
+  glm::vec3 specularFactor = { 1.f,1.f,1.f };
 
-    // Textures used by the material
-    // TODO: Texture implementation
+  // Textures used by the material
+  // TODO: Texture implementation
 //     std::shared_ptr<Texture> baseColourTex;
 //     std::shared_ptr<Texture> metallicRoughnessTex;
 //     std::shared_ptr<Texture> normalTex;
@@ -50,8 +53,8 @@ struct Material
 //    } texCoordSet;
 
     // TODO: Bools seem a strange choice here - Are these workflows exclusive or combined when it comes to the shader logic?
-    bool pbrWorkflowMetallicRoughness = true;
-    bool pbrWorkflowSpecularGlossiness = false;
+  bool pbrWorkflowMetallicRoughness = true;
+  bool pbrWorkflowSpecularGlossiness = false;
 };
 
 #endif

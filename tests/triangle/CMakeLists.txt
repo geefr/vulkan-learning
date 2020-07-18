@@ -1,4 +1,4 @@
-set( targetName "triangle" )
+set( targetName "test-triangle" )
 
 include_directories(${PROJECT_SOURCE_DIR}/vulkanutils)
 

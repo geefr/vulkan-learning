@@ -2,7 +2,7 @@
 #include "engine.h"
 
 #include "meshnode.h"
-#include "gltfloader.h"
+#include "loaders/gltfloader.h"
 
 #include <exception>
 #include <iostream>

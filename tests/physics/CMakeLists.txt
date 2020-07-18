@@ -1,4 +1,4 @@
-set( targetName "physics" )
+set( targetName "test-physics" )
 
 include_directories(${PROJECT_SOURCE_DIR}/vulkanutils)
 
