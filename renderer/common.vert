@@ -19,12 +19,12 @@ layout(location = 1) out vec3 outNormal;
 layout(location = 2) out vec2 outUV0;
 layout(location = 3) out vec2 outUV1;
 
-layout(binding = 0) uniform UBOSetPerFrame {
+layout(set = 0, binding = 0) uniform UBOSetPerFrame {
   mat4 viewMatrix;
   mat4 projectionMatrix;
 } uboPerFrame;
 
-layout(binding = 1) uniform UBOSetMaterial {
+layout(set = 1, binding = 0) uniform UBOSetMaterial {
   vec4 baseColourFactor;
   vec4 emissiveFactor;
   vec4 diffuseFactor;

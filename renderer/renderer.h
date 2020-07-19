@@ -106,7 +106,14 @@ public:
 
 private:
   void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer, uint32_t frameIndex);
-  void createDescriptorSets();
+  
+  /// Initialise Descriptor pool, layouts for the renderer - Per-frame constants
+  void initDescriptorSetsForRenderer();
+  void createDescriptorSetsForRenderer();
+
+  /// Initialise descriptor pool, layouts for mesh data - Per-mesh constants (materials)
+  void initDescriptorSetsForMeshes();
+  void createDefaultDescriptorSetForMesh();
   void createDescriptorSetForMesh(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material);
 
   // Reference to the Engine, used to pass back window events/other renderer specific actions
@@ -126,8 +133,12 @@ private:
 
   DeviceInstance::QueueRef* mQueue = nullptr;
 
-  vk::UniqueDescriptorPool mDescriptorPool;
-  std::vector<vk::DescriptorSet> mDescriptorSets; // Owned by pool
+  // Descriptor pool for the renderer's per-frame data
+  vk::UniqueDescriptorPool mDescriptorPoolRenderer;
+  std::vector<vk::DescriptorSet> mDescriptorSetsRenderer; // Owned by pool
+
+  // Descriptor pool for per-mesh data (materials)
+  vk::UniqueDescriptorPool mDescriptorPoolMeshes;
 
   vk::UniqueCommandPool mCommandPool;
   std::vector<vk::UniqueCommandBuffer> mCommandBuffers;
@@ -141,7 +152,6 @@ private:
   std::vector<vk::UniqueSemaphore> mRenderFinishedSemaphores;
   std::vector<vk::UniqueFence> mFrameInFlightFences;
   std::vector<std::unique_ptr<SimpleBuffer>> mUBOPerFrameInFlight;
-  std::vector<std::unique_ptr<SimpleBuffer>> mUBOPerMaterialInFlight;
 
   // Push constants can be updated at any point however
   vk::PushConstantRange mPushConstantSetRange;
@@ -151,17 +161,22 @@ private:
   glm::mat4x4 mViewMatrix = glm::mat4x4(1.0f);
   glm::mat4x4 mProjectionMatrix = glm::mat4x4(1.0f);
 
+  // An instruction to the renderer to draw the mesh
   struct MeshRenderInstance {
     std::shared_ptr<Mesh> mesh;
     glm::mat4x4 modelMatrix;
   };
   std::list<MeshRenderInstance> mFrameMeshesToRender;
 
+  // Shader resources for each rendered mesh
   struct MeshRenderData {
     vk::DescriptorSet descriptorSet;
     std::unique_ptr<SimpleBuffer> uboMaterial;
   };
   std::map<std::shared_ptr<Mesh>, MeshRenderData> mMeshRenderData;
+
+  std::unique_ptr<SimpleBuffer> mUBOMeshDataDefault;
+  vk::DescriptorSet mDescriptorSetMeshDataDefault;
 };
 
 #endif

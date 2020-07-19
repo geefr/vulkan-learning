@@ -85,8 +85,10 @@ void Renderer::initVK() {
     mGraphicsPipeline->vertexInputAttributes().emplace_back(2, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, uv0));
     mGraphicsPipeline->vertexInputAttributes().emplace_back(3, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, uv0));
 
-    mGraphicsPipeline->addDescriptorSetLayoutBinding(0, 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics);
-    mGraphicsPipeline->addDescriptorSetLayoutBinding(1, 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics);
+    // Setup descriptor layouts on pipeline
+    // Create descriptor pools
+    initDescriptorSetsForRenderer();
+    initDescriptorSetsForMeshes();
     
     // Register the push constant blocks
     mPushConstantSetRange = vk::PushConstantRange()
@@ -114,28 +116,12 @@ void Renderer::initVK() {
     mRenderFinishedSemaphores.emplace_back(mDeviceInstance->device().createSemaphoreUnique({}));
     // Create fence in signalled state so first wait immediately returns and resets fence
     mFrameInFlightFences.emplace_back(mDeviceInstance->device().createFenceUnique({ vk::FenceCreateFlagBits::eSignaled }));
-
-    std::unique_ptr<SimpleBuffer> pfUBO(new SimpleBuffer(
-      *mDeviceInstance.get(),
-      sizeof(UBOSetPerFrame),
-      vk::BufferUsageFlagBits::eUniformBuffer));
-    pfUBO->name() = "Per-Frame UBO " + std::to_string(i);
-    mUBOPerFrameInFlight.emplace_back(std::move(pfUBO));
-
-    std::unique_ptr<SimpleBuffer> matUBO(new SimpleBuffer(
-      *mDeviceInstance.get(),
-      sizeof(UBOSetPerMaterial),
-      vk::BufferUsageFlagBits::eUniformBuffer));
-    matUBO->name() = "Material UBO (Default)" + std::to_string(i);
-    Material defaultMat;
-    std::memcpy(matUBO->map(), &defaultMat, sizeof(UBOSetPerMaterial));
-    matUBO->flush();
-    matUBO->unmap();
-    mUBOPerMaterialInFlight.emplace_back(std::move(matUBO));
   }
 
-  // Create descriptor sets needed to bind UBOs and such
-  createDescriptorSets();
+  // Create UBOs for per-frame data
+  // and any defaults needed for materials/mesh data
+  createDescriptorSetsForRenderer();
+  createDefaultDescriptorSetForMesh();
 
   // TODO: Misfit
   mCommandPool = mDeviceInstance->createCommandPool({ vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
@@ -182,13 +168,6 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   // Bind the graphics pipeline
   commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->pipeline());
 
-  // Bind the descriptor sets - Bind the descriptor set (which points to the buffers) to the pipeline
-  commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-    mGraphicsPipeline->pipelineLayout(),
-    0, 1,
-    &mDescriptorSets[frameIndex],
-    0, nullptr);
-
   // Update the per-frame UBO
   UBOSetPerFrame pfData;
   pfData.viewMatrix = mViewMatrix;
@@ -197,6 +176,13 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   std::memcpy(pfUBO->map(), &pfData, sizeof(UBOSetPerFrame));
   pfUBO->flush();
   pfUBO->unmap(); // TODO: Shouldn't actually being unmapping here, the buffer will stick around so this is unecesarry
+
+  // And bind it to the pipeline
+  commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+    mGraphicsPipeline->pipelineLayout(),
+    0, 1,
+    &mDescriptorSetsRenderer[frameIndex],
+    0, nullptr);
 
   // Iterate over the meshes we need to render
   // TODO: This is a tad messy here - Should certainly
@@ -208,17 +194,18 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
     auto meshData = mMeshRenderData.find(mesh.mesh);
     if (meshData != mMeshRenderData.end()) {
       commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-        mGraphicsPipeline->pipelineLayout(),
-        1, 0,
+        mGraphicsPipeline->pipelineLayout(),  
+        1, 1,
         &meshData->second.descriptorSet,
         0, nullptr);
     }
-    else {
+    else 
+    {
       // Bind the default material
       commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
         mGraphicsPipeline->pipelineLayout(),
-        1, 0,
-        &mDescriptorSets[frameIndex + 1],
+        1, 1,
+        &mDescriptorSetMeshDataDefault,
         0, nullptr);
     }
 
@@ -265,77 +252,66 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   commandBuffer.end();
 }
 
-void Renderer::createDescriptorSets() {
-  // Create a descriptor pool, to allocate descriptor sets from
-  // per-frame and per-material descriptor sets
-  auto numDescriptorsPerFrame = 2u;
-  auto maxMeshDescriptors = 1000u;
+void Renderer::initDescriptorSetsForRenderer() {
+  // Register the Descriptor set layout on the pipeline
+  mGraphicsPipeline->addDescriptorSetLayoutBinding(0, 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics);
+
+  // Create a descriptor pool, to allocate descriptor sets for per-frame data
+  // Just need to be able to pass one UBO for now, but as we'll have multiple
+  // frames in flight we'll have several copies of the buffer
   auto poolSize = vk::DescriptorPoolSize()
-    .setType(vk::DescriptorType::eStorageBuffer)
-    .setDescriptorCount((mMaxFramesInFlight * numDescriptorsPerFrame) + maxMeshDescriptors);
+    .setType(vk::DescriptorType::eUniformBuffer)
+    .setDescriptorCount(mMaxFramesInFlight);
 
   auto poolInfo = vk::DescriptorPoolCreateInfo()
     .setFlags({})
-    .setMaxSets(mMaxFramesInFlight * 2)
+    .setMaxSets(mMaxFramesInFlight)
     .setPoolSizeCount(1)
     .setPPoolSizes(&poolSize);
-  mDescriptorPool = mDeviceInstance->device().createDescriptorPoolUnique(poolInfo);
+  mDescriptorPoolRenderer = mDeviceInstance->device().createDescriptorPoolUnique(poolInfo);
+}
 
-  // Create the descriptor sets, one for each UBO
+void Renderer::createDescriptorSetsForRenderer() {
+  // Create the descriptor sets
+  // These ones are created once and remain for the renderer's lifetime
+  // Data in the UBOs will change, after synchronising with the pipeline
+
+  std::vector<vk::DescriptorSetLayout> dsLayouts;
+  for( auto i = 0u; i < mMaxFramesInFlight; ++i ) dsLayouts.emplace_back(mGraphicsPipeline->descriptorSetLayouts()[0].get());
+  auto dsInfo = vk::DescriptorSetAllocateInfo()
+    .setDescriptorPool(mDescriptorPoolRenderer.get())
+    .setDescriptorSetCount(dsLayouts.size())
+    .setPSetLayouts(dsLayouts.data());
+
+  auto sets = mDeviceInstance->device().allocateDescriptorSets(dsInfo);
+  mDescriptorSetsRenderer = std::vector<vk::DescriptorSet>(
+    std::make_move_iterator(sets.begin()),
+    std::make_move_iterator(sets.end())
+  );
+
+  // Create UBOs
   for (auto i = 0u; i < mMaxFramesInFlight; ++i) {
-    // TODO: This is a complete mess now - Should pull descriptor sets down to vulkanutils and make it a bit more sane
-    for( auto j = 0u; j < 2; ++j ) {
-      const vk::DescriptorSetLayout dsLayouts[] = { mGraphicsPipeline->descriptorSetLayouts()[j].get() };
-      auto dsInfo = vk::DescriptorSetAllocateInfo()
-        .setDescriptorPool(mDescriptorPool.get())
-        .setDescriptorSetCount(1)
-        .setPSetLayouts(dsLayouts);
-
-      auto sets = mDeviceInstance->device().allocateDescriptorSets(dsInfo);
-      mDescriptorSets.emplace_back(std::move(sets.front()));
-    }
+    std::unique_ptr<SimpleBuffer> pfUBO(new SimpleBuffer(
+      *mDeviceInstance.get(),
+      sizeof(UBOSetPerFrame),
+      vk::BufferUsageFlagBits::eUniformBuffer));
+    pfUBO->name() = "Per-Frame UBO " + std::to_string(i);
+    mUBOPerFrameInFlight.emplace_back(std::move(pfUBO));
   }
 
+  // Write descriptors to the sets, to bind them to the UBOs
   for (auto i = 0u; i < mMaxFramesInFlight; ++i) {
-    auto& uboPerFrame = mUBOPerFrameInFlight[i];
-    auto& uboPerMat = mUBOPerMaterialInFlight[i];
+    auto& ubo = mUBOPerFrameInFlight[i];
 
-    // Update the descriptor set to map to the buffers
     std::vector<vk::DescriptorBufferInfo> uInfos;
-    auto uInfo1 = vk::DescriptorBufferInfo()
-      .setBuffer(uboPerFrame->buffer())
+    auto uInfo = vk::DescriptorBufferInfo()
+      .setBuffer(ubo->buffer())
       .setOffset(0)
       .setRange(VK_WHOLE_SIZE);
-    uInfos.emplace_back(uInfo1);
+    uInfos.emplace_back(uInfo);
 
     auto wInfo = vk::WriteDescriptorSet()
-      .setDstSet(mDescriptorSets[i * 2])
-      .setDstBinding(0)
-      .setDstArrayElement(0)
-      .setDescriptorCount(static_cast<uint32_t>(uInfos.size()))
-      .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-      .setPImageInfo(nullptr)
-      .setPBufferInfo(uInfos.data())
-      .setPTexelBufferView(nullptr);
-
-    mDeviceInstance->device().updateDescriptorSets(1, &wInfo, 0, nullptr);
-  }
-
-  for (auto i = 0u; i < mMaxFramesInFlight; ++i) {
-    auto& uboPerFrame = mUBOPerFrameInFlight[i];
-    auto& uboPerMat = mUBOPerMaterialInFlight[i];
-
-    // Update the descriptor set to map to the buffers
-    std::vector<vk::DescriptorBufferInfo> uInfos;
-
-    auto uInfo2 = vk::DescriptorBufferInfo()
-      .setBuffer(uboPerMat->buffer())
-      .setOffset(0)
-      .setRange(VK_WHOLE_SIZE);
-    uInfos.emplace_back(uInfo2);
-
-    auto wInfo = vk::WriteDescriptorSet()
-      .setDstSet(mDescriptorSets[(i * 2) + 1])
+      .setDstSet(mDescriptorSetsRenderer[i])
       .setDstBinding(0)
       .setDstArrayElement(0)
       .setDescriptorCount(static_cast<uint32_t>(uInfos.size()))
@@ -348,14 +324,86 @@ void Renderer::createDescriptorSets() {
   }
 }
 
+void Renderer::initDescriptorSetsForMeshes() {
+  // Register the Descriptor set layout on the pipeline
+  mGraphicsPipeline->addDescriptorSetLayoutBinding(1, 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics);
+
+  // Create a descriptor pool, to allocate descriptor sets for per-mesh data
+  // Here we've set a resonable limit of 1000, meaning 1000 different material
+  // and texture combinations within a single frame
+  // TODO: At the moment we don't clear down old data, so if the scene changes
+  // over time we'll run out.
+  auto descriptorsPerSet = 1u;
+  auto maxDescriptorSets = 1000u;
+  auto poolSize = vk::DescriptorPoolSize()
+    .setType(vk::DescriptorType::eUniformBuffer)
+    .setDescriptorCount(maxDescriptorSets * descriptorsPerSet);
+
+  auto poolInfo = vk::DescriptorPoolCreateInfo()
+    .setFlags({})
+    .setMaxSets(maxDescriptorSets)
+    .setPoolSizeCount(1)
+    .setPPoolSizes(&poolSize);
+  mDescriptorPoolMeshes = mDeviceInstance->device().createDescriptorPoolUnique(poolInfo);
+}
+
+void Renderer::createDefaultDescriptorSetForMesh() {
+  // Create a default descriptor set/UBO for mesh data
+  // This will serve as the default material is none is available
+  // on the mesh
+  // TODO: Set this up with a nice 'missing texture' texture
+  const vk::DescriptorSetLayout dsLayouts[] = { mGraphicsPipeline->descriptorSetLayouts()[1].get() };
+  auto dsInfo = vk::DescriptorSetAllocateInfo()
+    .setDescriptorPool(mDescriptorPoolMeshes.get())
+    .setDescriptorSetCount(1)
+    .setPSetLayouts(dsLayouts);
+
+  auto sets = mDeviceInstance->device().allocateDescriptorSets(dsInfo);
+  mDescriptorSetMeshDataDefault = std::move(sets.front());
+
+  // Create the default material UBO
+  mUBOMeshDataDefault.reset(new SimpleBuffer(
+    *mDeviceInstance.get(),
+    sizeof(UBOSetPerMaterial),
+    vk::BufferUsageFlagBits::eUniformBuffer));
+  mUBOMeshDataDefault->name() = "Material UBO (Default)";
+
+  UBOSetPerMaterial defaultMat;
+  defaultMat.baseColourFactor = glm::vec4(1.f, 0.f, 1.f, 1.f);
+  std::memcpy(mUBOMeshDataDefault->map(), &defaultMat, sizeof(UBOSetPerMaterial));
+  mUBOMeshDataDefault->flush();
+  mUBOMeshDataDefault->unmap();
+
+  // Write descriptors to the sets, to bind them to the UBOs
+  auto& ubo = mUBOMeshDataDefault;
+
+  std::vector<vk::DescriptorBufferInfo> uInfos;
+  auto uInfo = vk::DescriptorBufferInfo()
+    .setBuffer(ubo->buffer())
+    .setOffset(0)
+    .setRange(VK_WHOLE_SIZE);
+  uInfos.emplace_back(uInfo);
+
+  auto wInfo = vk::WriteDescriptorSet()
+    .setDstSet(mDescriptorSetMeshDataDefault)
+    .setDstBinding(0)
+    .setDstArrayElement(0)
+    .setDescriptorCount(static_cast<uint32_t>(uInfos.size()))
+    .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+    .setPImageInfo(nullptr)
+    .setPBufferInfo(uInfos.data())
+    .setPTexelBufferView(nullptr);
+
+  mDeviceInstance->device().updateDescriptorSets(1, &wInfo, 0, nullptr);
+}
+
 void Renderer::createDescriptorSetForMesh(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material) {
+  // Ensure a descriptor set and UBO are setup in order to render the mesh/material
   auto meshData = mMeshRenderData.find(mesh);
   if (meshData != mMeshRenderData.end()) return;
 
   // The mesh hasn't been seen before
   // Create the necesarry descriptor set
-  // TODO: For now these will never be cleared up, so we'll leak resources
-  // when rendering dynamic scenes with lots of added/removed meshes
   MeshRenderData d;
 
   // Setup the UBO, to contain material info
@@ -377,9 +425,11 @@ void Renderer::createDescriptorSetForMesh(std::shared_ptr<Mesh> mesh, std::share
   d.uboMaterial->flush();
   d.uboMaterial->unmap();
 
+  // TODO: Magic number - This should be encapsulated somehow, or just have a value in case we
+  // change the pipeline layout later (likely)
   const vk::DescriptorSetLayout dsLayouts[] = { mGraphicsPipeline->descriptorSetLayouts()[1].get() };
   auto dsInfo = vk::DescriptorSetAllocateInfo()
-    .setDescriptorPool(mDescriptorPool.get())
+    .setDescriptorPool(mDescriptorPoolMeshes.get())
     .setDescriptorSetCount(1)
     .setPSetLayouts(dsLayouts);
 
@@ -401,11 +451,11 @@ void Renderer::createDescriptorSetForMesh(std::shared_ptr<Mesh> mesh, std::share
   
   // Update the descriptor set to map to the buffers
   std::vector<vk::DescriptorBufferInfo> uInfos;
-  auto uInfo1 = vk::DescriptorBufferInfo()
+  auto uInfo = vk::DescriptorBufferInfo()
     .setBuffer(d.uboMaterial->buffer())
     .setOffset(0)
     .setRange(VK_WHOLE_SIZE);
-  uInfos.emplace_back(uInfo1);
+  uInfos.emplace_back(uInfo);
 
   auto wInfo = vk::WriteDescriptorSet()
     .setDstSet(d.descriptorSet)
@@ -564,22 +614,23 @@ void Renderer::cleanup() {
   }
   mDeviceInstance->waitAllDevicesIdle();
 
-  mUBOPerFrameInFlight.clear();
-  mUBOPerMaterialInFlight.clear();
+  mUBOMeshDataDefault.reset();
   mMeshRenderData.clear();
-
+  mUBOPerFrameInFlight.clear();
+  
   mFrameInFlightFences.clear();
   mRenderFinishedSemaphores.clear();
   mImageAvailableSemaphores.clear();
 
   mCommandBuffers.clear();
   mCommandPool.reset();
+
+  mDescriptorPoolMeshes.reset();
+  mDescriptorPoolRenderer.reset();
+
   mGraphicsPipeline.reset();
   mFrameBuffer.reset();
   mWindowIntegration.reset();
-  
-  mDescriptorPool.reset();
-
   mDeviceInstance.reset();
 
   glfwDestroyWindow(mWindow);

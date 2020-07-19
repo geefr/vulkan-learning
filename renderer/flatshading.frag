@@ -15,13 +15,19 @@ layout(location = 3) in vec2 inUV1;
 
 layout(location = 0) out vec4 outColour;
 
-// TODO: Push constants vs UBOs? What's best practice?
-layout(push_constant) uniform push_matrices_t {
-    mat4 model;
-    mat4 view;
-    mat4 projection;
-} matrices;
+layout(set = 0, binding = 0) uniform UBOSetPerFrame {
+  mat4 viewMatrix;
+  mat4 projectionMatrix;
+} uboPerFrame;
+
+layout(set = 1, binding = 0) uniform UBOSetMaterial {
+  vec4 baseColourFactor;
+  vec4 emissiveFactor;
+  vec4 diffuseFactor;
+  vec3 specularFactor;
+  float alphaCutOff;
+} uboMaterial;
 
 void main() {
-  outColour = vec4(1.0, 0.5, 0.5, 1.0);
+  outColour = uboMaterial.baseColourFactor;
 }
