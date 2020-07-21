@@ -70,8 +70,8 @@ void Renderer::initVK() {
   // In this case we can throw away the shader modules after building as they're only used by the one pipeline
   {
     mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eVertex] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/mesh.vert.spv");
-    mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eFragment] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/flatshading.frag.spv");
-    // mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eFragment] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/phongish.frag.spv");
+    // mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eFragment] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/flatshading.frag.spv");
+    mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eFragment] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/phongish.frag.spv");
 
     // The layout of our vertex buffers
     auto vertBufferBinding = vk::VertexInputBindingDescription()
@@ -179,7 +179,7 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   UBOSetPerFrame pfData;
   pfData.viewMatrix = mViewMatrix;
   pfData.projectionMatrix = mProjectionMatrix;
-  pfData.eyePos = mEyePos;
+  pfData.eyePos = glm::vec4(mEyePos, 1.0);
   for( auto lI = 0u; lI < mLightsToRender.size(); ++lI ) {
       pfData.lights[lI] = mLightsToRender[lI];
     }
@@ -560,8 +560,8 @@ void Renderer::frameStart() {
 
   // TODO: Placeholder for lighting stuff
   ShaderLightData l;
-  l.colour = glm::vec4(1.f,0.f,0.f, 1.f);
-  l.posOrDir = glm::vec4(0.f,10.f,0.f,1.f);
+  l.colour = glm::vec4(0.8f,0.5f,0.2f, 1.f);
+  l.posOrDir = glm::vec4(10.f,10.f,0.f,1.f);
   l.typeAndParams.w = static_cast<float>(Light::Type::Point);
   mLightsToRender.emplace_back(l);
 

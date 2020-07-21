@@ -62,15 +62,16 @@ private:
     glm::vec4 posOrDir; // position if w == 1 else direction
     glm::vec4 colour;   // w == intensity
     glm::vec4 typeAndParams; // x == range, y == innerConeCos, z == outerConeCos, w == Light::Type
-    glm::vec4 padding;
   };
   /// Per-frame uniforms, binding = 0
   struct UBOSetPerFrame {
     glm::mat4x4 viewMatrix;
     glm::mat4x4 projectionMatrix;
+    glm::vec4 eyePos;
     float numLights;
-    glm::vec3 eyePos;
-    glm::vec4 padding;
+    float pad1;
+    float pad2;
+    float pad3;
     ShaderLightData lights[MAX_LIGHTS];
   };
 
@@ -80,6 +81,7 @@ private:
     glm::vec4 emissiveFactor;
     glm::vec4 diffuseFactor;
     glm::vec3 specularFactor;
+    float pad;
     float alphaCutOff;
     // TODO: And magically we're 16-byte aligned
     // When adding more data be careful here

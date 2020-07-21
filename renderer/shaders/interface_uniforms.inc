@@ -15,7 +15,6 @@ struct Light {
   vec4 posOrDir; // position if w == 1 else direction
   vec4 colour;   // w == intensity
   vec4 typeAndParams; // x == range, y == innerConeCos, z == outerConeCos, w == type
-  vec4 padding;
 };
 
 // Specialisation constants
@@ -25,9 +24,11 @@ layout(constant_id = 0) const uint maxLights = 100;
 layout(set = 0, binding = 0) uniform UBOSetPerFrame {
   mat4 viewMatrix;
   mat4 projectionMatrix;
+  vec4 eyePos;
   float numLights;
-  vec3 eyePos;
-  vec4 padding;
+  float pad1;
+  float pad2;
+  float pad3;
   Light[maxLights] lights;
 } uboPerFrame;
 
