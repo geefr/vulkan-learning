@@ -69,7 +69,7 @@ void Renderer::initVK() {
   // Build the graphics pipeline
   // In this case we can throw away the shader modules after building as they're only used by the one pipeline
   {
-    mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eVertex] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/common.vert.spv");
+    mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eVertex] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/mesh.vert.spv");
     mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eFragment] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/flatshading.frag.spv");
 
     // The layout of our vertex buffers

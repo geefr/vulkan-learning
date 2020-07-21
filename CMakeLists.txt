@@ -77,11 +77,12 @@ set( LIB_TYPE STATIC )
 # _target - The target which requires this shader
 # _shadertarget - Name of the custom target for compiling the shader
 # _shaderFile - The shader file to compile
-function(compile_shader _target _shaderTarget _shaderFile)
+# _additionalSrc - Additional files to consider as sources for the target
+function(compile_shader _target _shaderTarget _shaderFile _additionalSrc)
   get_filename_component( shaderFileBaseName ${_shaderFile} NAME )
   add_custom_target( ${_shaderTarget}
     COMMAND ${glslCompiler} -V ${_shaderFile} -o ${shaderFileBaseName}.spv
-    SOURCES ${_shaderFile} )
+    SOURCES ${_shaderFile} ${_additionalSrc})
   add_dependencies( ${_target} ${_shaderTarget} )
 endfunction()
 

@@ -13,5 +13,6 @@ add_library( ${targetName} ${LIB_TYPE}
 	)
 target_link_libraries( ${targetName} Vulkan::Vulkan glfw vulkanutils engine )
 
-compile_shader(${targetName} ${targetName}-common-vert ${CMAKE_CURRENT_SOURCE_DIR}/common.vert)
-compile_shader(${targetName} ${targetName}-flatshading-frag ${CMAKE_CURRENT_SOURCE_DIR}/flatshading.frag)
+compile_shader(${targetName} ${targetName}-mesh-vert ${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.vert ${CMAKE_CURRENT_SOURCE_DIR}/shaders/interface_uniforms.inc)
+compile_shader(${targetName} ${targetName}-flatshading-frag ${CMAKE_CURRENT_SOURCE_DIR}/shaders/flatshading.frag ${CMAKE_CURRENT_SOURCE_DIR}/shaders/interface_uniforms.inc)
+
