@@ -47,6 +47,7 @@ endif()
 if(NOT EXISTS "${glslCompiler}")
         message( FATAL_ERROR "Unable to locate 'glslangValidator'. Please install glsl-tools or provide a Vulkan SDK which includes this tool")
 endif()
+message( "Using GLSL Compiler at: ${glslCompiler}")
 
 if( MSVC )
   # TODO: Hack - The binary glfw releases don't include a cmake config and windows cmake doesn't have a FindGLFW.cmake

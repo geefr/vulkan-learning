@@ -97,6 +97,12 @@ void Renderer::initVK() {
       .setSize(sizeof(PushConstantSet));
     mGraphicsPipeline->pushConstants().emplace_back(mPushConstantSetRange);
 
+    // Setup specialisation constants
+    vk::SpecializationMapEntry specs[] = {
+      {0, offsetof(GraphicsSpecConstants, maxLights), sizeof(uint32_t)},
+    };
+    mGraphicsPipeline->specialisationConstants()[vk::ShaderStageFlagBits::eAllGraphics] = vk::SpecializationInfo(1, specs, sizeof(GraphicsSpecConstants), &mGraphicsPipeline);
+
     // Finally build the pipeline
     mGraphicsPipeline->build();
   }
@@ -172,6 +178,13 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   UBOSetPerFrame pfData;
   pfData.viewMatrix = mViewMatrix;
   pfData.projectionMatrix = mProjectionMatrix;
+
+  for( auto lI = 0u; lI < mLightsToRender.size(); ++lI ) {
+      pfData.lights[lI] = mLightsToRender[lI];
+    }
+  // std::memcpy(pfData.lights, mLightsToRender.data(), mLightsToRender.size() * sizeof(ShaderLightData));
+  pfData.numLights = mLightsToRender.size();
+
   auto& pfUBO = mUBOPerFrameInFlight[frameIndex];
   std::memcpy(pfUBO->map(), &pfData, sizeof(UBOSetPerFrame));
   pfUBO->flush();
@@ -487,6 +500,35 @@ void Renderer::renderMesh(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> 
   createDescriptorSetForMesh(mesh, material);
 }
 
+void Renderer::renderLight( const Light& l ) {
+  if( mLightsToRender.size() >= mGraphicsSpecConstants.maxLights ) {
+    // We've hit the limit of the shaders. Probably an insane scene but handle it sensibly
+    std::cerr << "WARNING: Renderer::renderLight: Reached the limit of " << mGraphicsSpecConstants.maxLights << " lights. Simplify the scene or increase Renderer::MAX_LIGHTS" << std::endl;
+    return;
+  }
+  ShaderLightData sl;
+  sl.colour = glm::vec4(l.colour, l.intensity);
+  switch(l.type()) {
+    case Light::Type::Directional:
+      sl.posOrDir = glm::vec4(l.direction, 0.f);
+      break;
+    case Light::Type::Point:
+      sl.posOrDir = glm::vec4(l.position, 1.f);
+      break;
+    case Light::Type::Spot:
+      sl.posOrDir = glm::vec4(l.position, 1.f);
+      break;
+  }
+  // x == range, y == innerConeCos, z == outerConeCos, w == Light::Type
+  sl.typeAndParams = glm::vec4(
+    l.range,
+    std::cos(l.innerConeAngle),
+    std::cos(l.outerConeAngle),
+    static_cast<float>(l.type())
+  );
+  mLightsToRender.emplace_back(sl);
+}
+
 bool Renderer::pollWindowEvents() {
   // Poll the events, will be handled by the GLFW callbacks
   // and passed to the mEngine's event queue
@@ -501,6 +543,7 @@ bool Renderer::pollWindowEvents() {
 void Renderer::frameStart() {
   // Reset any per-frame data
   mFrameMeshesToRender.clear();
+  mLightsToRender.clear();
 
   // Update the per-frame uniforms
   mViewMatrix = mEngine.camera().mViewMatrix;
@@ -508,6 +551,19 @@ void Renderer::frameStart() {
 
   // Engine will now do its thing, we'll get calls to various
   // render methods here, then frameEnd to commit the frame
+
+
+
+
+
+  // TODO: Placeholder for lighting stuff
+  ShaderLightData l;
+  l.colour = glm::vec4(1.f,0.f,0.f, 1.f);
+  l.posOrDir = glm::vec4(0.f,10.f,0.f,1.f);
+  l.typeAndParams.w = static_cast<float>(Light::Type::Point);
+  mLightsToRender.emplace_back(l);
+
+
 }
 
 void Renderer::frameEnd() {

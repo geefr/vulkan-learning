@@ -11,7 +11,7 @@ add_library( ${targetName} ${LIB_TYPE}
   renderer.h
   renderer.cpp
 	)
-target_link_libraries( ${targetName} Vulkan::Vulkan glfw vulkanutils )
+target_link_libraries( ${targetName} Vulkan::Vulkan glfw vulkanutils engine )
 
 compile_shader(${targetName} ${targetName}-common-vert ${CMAKE_CURRENT_SOURCE_DIR}/common.vert)
 compile_shader(${targetName} ${targetName}-flatshading-frag ${CMAKE_CURRENT_SOURCE_DIR}/flatshading.frag)

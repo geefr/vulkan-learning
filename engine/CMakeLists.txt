@@ -15,6 +15,8 @@ add_library( ${targetName} ${LIB_TYPE}
 	event.cpp
 	camera.h
 	camera.cpp
+  light.h
+  light.cpp
   vertex.h
 	mesh.h
   mesh.cpp
