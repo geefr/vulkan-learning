@@ -21,11 +21,9 @@ void main() {
   // tbh this shader is a placeholder until a decent PBR one is implemented
   // It's a basic phong-like model but it's missing anything fancy
   // Will assume all lights are positional point lights, no attenuation
-  //
-  // ..Aand it's broken, either way it's enough to prove the shader interface/uniforms are correct :D
 
   vec3 normal = normalize(inNormal);
-  vec3 eyeDir = normalize(uboPerFrame.eyePos - inPosWorld);
+  vec3 eyeDir = normalize(uboPerFrame.eyePos.xyz - inPosWorld);
 
   outColour = vec4(0.0,0.0,0.0,0.0);
   for( uint i = 0; i < uboPerFrame.numLights; i++ ) {
@@ -34,12 +32,16 @@ void main() {
 
     // ambient hardcoded
     vec4 ambient = vec4(vec3(0.1,0.1,0.1) * uboMaterial.baseColourFactor.xyz, 1.0);
+
     // Diffuse from light + base colour
+    //vec4 diffuse = l.colour + uboMaterial.baseColourFactor;
     vec4 diffuse = vec4(l.colour.xyz * max(dot(normal,lightDir) * uboMaterial.baseColourFactor.xyz, 0.0), 1.0);
+
     // Specular, 'shininess' pow factor hardcoded
     vec3 specReflectDir = reflect(-lightDir,normal);
     vec4 specular = vec4(l.colour.xyz * pow(max(dot(eyeDir, specReflectDir), 0.0), 4.0) * uboMaterial.specularFactor, 1.0);
 
-    outColour += (ambient + diffuse + specular) / float(uboPerFrame.numLights);
+    outColour += (ambient + diffuse /*+ specular*/) / float(uboPerFrame.numLights);
   }
+  outColour.a = 1.0;
 }
