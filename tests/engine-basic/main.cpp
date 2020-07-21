@@ -37,10 +37,13 @@ int main(int argc, char* argv[])
         eng.nodegraph()->children().emplace_back(dummyMesh);
     }
 
+    static bool camActive = true;
+
     // Event Handling
     eng.addGlobalEventCallback([](Engine& engine, Event& e) {
       if( auto keypress = dynamic_cast<KeyPressEvent*>(&e) ) {
         if( keypress->mKey == 256 ) engine.quit();
+        else if( keypress->mKey == ' ') camActive = !camActive;
       }
     });
 
@@ -51,13 +54,15 @@ int main(int argc, char* argv[])
         static bool increaseRot = false;
 
         // Just sweep the camera around the scene for now
-        if( increaseRot ) {
-            camRot += 1.5 * deltaT;
-            if( camRot > glm::radians(45.f)) increaseRot = false;
-        } else {
-            camRot -= 1.5 * deltaT;
-            if( camRot < glm::radians(-45.f)) increaseRot = true;
-        }
+        if( camActive ) {
+          if( increaseRot ) {
+              camRot += 1.5 * deltaT;
+              if( camRot > glm::radians(45.f)) increaseRot = false;
+          } else {
+              camRot -= 1.5 * deltaT;
+              if( camRot < glm::radians(-45.f)) increaseRot = true;
+          }
+         }
 
         glm::vec4 camPos(0.0, 2.0, -5.0, 1.0);
         glm::mat4 camRotMat(1.0f);

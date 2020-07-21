@@ -29,8 +29,11 @@ void main() {
   vec4 worldPos = matrices.model * vec4(inPosition, 1.0);
   outPosWorld = worldPos.xyz;
 
-  mat4 normalMatrix = transpose(inverse(uboPerFrame.viewMatrix * matrices.model));
-  outNormal = (normalMatrix * vec4(inNormal, 1.0)).xyz;
+  // Lighting calculations are performed in world space
+  // This uses the 'normal matrix' which scales/rotates correctly for the normals
+  // TODO: Should move normal matrix to cpu side, quit being wasteful here
+  mat3 normalMatrix = transpose(inverse(mat3(uboPerFrame.viewMatrix * matrices.model)));
+  outNormal = normalMatrix * inNormal;
 
   outUV0 = inUV0;
   outUV1 = inUV1;

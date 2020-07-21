@@ -10,8 +10,10 @@
 #extension GL_GOOGLE_include_directive : enable
 #include "interface_uniforms.inc"
 
+// In world space
 layout(location = 0) in vec3 inPosWorld;
 layout(location = 1) in vec3 inNormal;
+// TODO: Need a mapping to say what these coords/samplers map to
 layout(location = 2) in vec2 inUV0;
 layout(location = 3) in vec2 inUV1;
 
@@ -21,7 +23,6 @@ void main() {
   // tbh this shader is a placeholder until a decent PBR one is implemented
   // It's a basic phong-like model but it's missing anything fancy
   // Will assume all lights are positional point lights, no attenuation
-
   vec3 normal = normalize(inNormal);
   vec3 eyeDir = normalize(uboPerFrame.eyePos.xyz - inPosWorld);
 

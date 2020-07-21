@@ -64,7 +64,7 @@ void Renderer::initVK() {
   // Create the pipeline, with a flag to invert the viewport height (Switch to left handed coordinate system)
   // If changing this check the compile flags for GLM_FORCE_LEFT_HANDED - The rest of the engine uses one cs
   // and the renderer should handle it
-  mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get(), true));
+  mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get(), false));
 
   // Build the graphics pipeline
   // In this case we can throw away the shader modules after building as they're only used by the one pipeline
