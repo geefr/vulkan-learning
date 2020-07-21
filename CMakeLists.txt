@@ -19,11 +19,12 @@ endif()
 if( MSVC )
   # add_compile_definitions( VK_USE_PLATFORM_WIN32_KHR )
   add_compile_definitions( NOMINMAX ) # Thanks Microsoft..
-  set( glslCompilerName "glslangValidator.exe" )
+  set( glslCompiler "glslangValidator.exe" )
 else()
   set( CMAKE_CXX_FLAGS "-Werror=all -Wno-error=old-style-cast -Wno-error=unused-variable -Wno-error=unused-but-set-variable" )
   find_package(X11 REQUIRED)
-  set( glslCompilerName "glslangvalidator" )
+  set( glslCompiler "$ENV{VULKAN_SDK}/bin/glslangValidator" )
+
   
   # Just assume we're on desktop linux, couldn't possibly bite us later :D
   # add_compile_definitions( VK_USE_PLATFORM_XLIB_KHR )
@@ -37,12 +38,14 @@ if( NOT CMAKE_BUILD_TYPE MATCHES "Debug" )
   add_compile_definitions(VULKAN_HPP_NO_EXCEPTIONS)
 endif()
 
+message( "Looking for glslangValidator: ${glslCompiler}")
+
 # This is a little ugly but will work
 if(NOT EXISTS "${glslCompiler}")
   set( glslCompiler "${Vulkan_INCLUDE_DIR}/../bin/${glslCompilerName}")
 endif()
 if(NOT EXISTS "${glslCompiler}")
-	message( FATAL_ERROR "Unable to locate 'glslValidator'. Please install glsl-tools or provide a Vulkan SDK which includes this tool")
+        message( FATAL_ERROR "Unable to locate 'glslangValidator'. Please install glsl-tools or provide a Vulkan SDK which includes this tool")
 endif()
 
 if( MSVC )

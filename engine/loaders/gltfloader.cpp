@@ -141,7 +141,7 @@ void GLTFLoader::parseGltfNode(std::shared_ptr<Node> targetParent, tinygltf::Nod
 
       std::shared_ptr<MeshNode> mesh(new MeshNode(vertices, indices));
 
-      if (gPrimitive.material > -1 && gPrimitive.material < materials.size()) {
+      if (gPrimitive.material > -1 && static_cast<size_t>(gPrimitive.material) < materials.size()) {
         auto mat = materials[gPrimitive.material];
         mesh->material( mat );
       }
@@ -223,14 +223,14 @@ std::vector<std::shared_ptr<Material>> GLTFLoader::parseGltfMaterials(tinygltf::
       }
       if (specGlossExt.Has("diffuseFactor")) {
         auto factor = specGlossExt.Get("diffuseFactor");
-        for (auto i = 0; i < factor.ArrayLen(); ++i) {
+        for (auto i = 0u; i < factor.ArrayLen(); ++i) {
           auto val = factor.Get(i);
           mat->diffuseFactor[i] = val.IsNumber() ? static_cast<float>(val.Get<double>()) : static_cast<float>(val.Get<int>());
         }
       }
       if (specGlossExt.Has("specularFactor")) {
         auto factor = specGlossExt.Get("specularFactor");
-        for (auto i = 0; i < factor.ArrayLen(); ++i) {
+        for (auto i = 0u; i < factor.ArrayLen(); ++i) {
           auto val = factor.Get(i);
           mat->specularFactor[i] = val.IsNumber() ? static_cast<float>(val.Get<double>()) : static_cast<float>(val.Get<int>());
         }
