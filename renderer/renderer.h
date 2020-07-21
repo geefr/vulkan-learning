@@ -69,8 +69,8 @@ private:
     glm::mat4x4 viewMatrix;
     glm::mat4x4 projectionMatrix;
     float numLights;
-    glm::vec3 padding;
-    glm::vec4 padding2;
+    glm::vec3 eyePos;
+    glm::vec4 padding;
     ShaderLightData lights[MAX_LIGHTS];
   };
 
@@ -187,6 +187,7 @@ private:
   // render will happen once this is populated
   glm::mat4x4 mViewMatrix = glm::mat4x4(1.0f);
   glm::mat4x4 mProjectionMatrix = glm::mat4x4(1.0f);
+  glm::vec3 mEyePos = {0.f,0.f,0.f};
 
   // An instruction to the renderer to draw the mesh
   struct MeshRenderInstance {

@@ -25,6 +25,7 @@ public:
 
     glm::mat4x4 mViewMatrix;
     glm::mat4x4 mProjectionMatrix;
+    glm::vec3 mPosition;
 };
 
 #endif

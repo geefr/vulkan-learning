@@ -15,6 +15,7 @@ Camera::~Camera() {}
 
 void Camera::lookAt(glm::vec3 eye, glm::vec3 center, glm::vec3 up) {
     mViewMatrix = glm::lookAt(eye, center, up);
+    mPosition = eye;
 }
 
 void Camera::projectionOrtho(glm::vec4 ortho, float near, float far) {

@@ -26,7 +26,8 @@ layout(set = 0, binding = 0) uniform UBOSetPerFrame {
   mat4 viewMatrix;
   mat4 projectionMatrix;
   float numLights;
-  vec3 padding;
+  vec3 eyePos;
+  vec4 padding;
   Light[maxLights] lights;
 } uboPerFrame;
 

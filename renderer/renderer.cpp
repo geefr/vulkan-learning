@@ -71,6 +71,7 @@ void Renderer::initVK() {
   {
     mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eVertex] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/mesh.vert.spv");
     mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eFragment] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/flatshading.frag.spv");
+    // mGraphicsPipeline->shaders()[vk::ShaderStageFlagBits::eFragment] = mGraphicsPipeline->createShaderModule(std::string(RENDERER_SHADER_ROOT) + "/phongish.frag.spv");
 
     // The layout of our vertex buffers
     auto vertBufferBinding = vk::VertexInputBindingDescription()
@@ -178,7 +179,7 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   UBOSetPerFrame pfData;
   pfData.viewMatrix = mViewMatrix;
   pfData.projectionMatrix = mProjectionMatrix;
-
+  pfData.eyePos = mEyePos;
   for( auto lI = 0u; lI < mLightsToRender.size(); ++lI ) {
       pfData.lights[lI] = mLightsToRender[lI];
     }
@@ -548,6 +549,7 @@ void Renderer::frameStart() {
   // Update the per-frame uniforms
   mViewMatrix = mEngine.camera().mViewMatrix;
   mProjectionMatrix = mEngine.camera().mProjectionMatrix;
+  mEyePos = mEngine.camera().mPosition;
 
   // Engine will now do its thing, we'll get calls to various
   // render methods here, then frameEnd to commit the frame
