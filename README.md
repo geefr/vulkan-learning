@@ -3,12 +3,10 @@ This is just an area for me to play around with Vulkan, current plan is to work 
 
 So far models can be loaded, arranged in a scene graph, and rendered. There's also the ability to hook update methods onto nodes and a primitive camera setup.
 
-Right now the rendering itself is very basic - The shader interfaces are getting there but I still need to load material/texture information and implement a PBR shader or similar.
+Right now the rendering itself is very basic - The shader interfaces are getting there and there's some basic lighting. Haven't implemented a proper PBR shader yet, or added texturing to the shader interface.
 
 # Platform Support
-Most development is being done on Linux, testing on Nvidia and Intel GPUs.
-
-I'm not heavily testing on windows but everything should build, may need a few tweaks to the CMake setup now and then.
+Development is being done between Linux and Windows, testing on Nvidia and Intel GPUs.
 
 For Android the core sections should mostly work but it's hardcoded to use GLFW for now, would require rework here to use the Android UI system.
 
