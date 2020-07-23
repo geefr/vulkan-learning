@@ -146,7 +146,8 @@ void GraphicsPipeline::createPipeline() {
       .setRasterizerDiscardEnable(false)
       .setPolygonMode(vk::PolygonMode::eFill)
       .setCullMode(vk::CullModeFlagBits::eBack)
-      .setFrontFace(vk::FrontFace::eCounterClockwise)
+      // TODO: This maybe shouldn't be hardcoded here. if mInvertY expect left-handed vertices into shader, else right-handed
+      .setFrontFace(mInvertY ? vk::FrontFace::eClockwise : vk::FrontFace::eCounterClockwise)
       .setDepthBiasEnable(false)
       .setDepthBiasConstantFactor(0.f)
       .setDepthClampEnable(false)

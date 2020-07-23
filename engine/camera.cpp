@@ -2,6 +2,10 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
+// This class expects glm to default to left handed, zero -> one depth range
+// But the camera class itself would work with anything
+// (Just make sure the transforms here match the rest of the engine/renderer)
+
 Camera::Camera() {
     // TODO: Pass aspect in - handle viewport/window size changes
     projectionPerspective( glm::radians(30.f), 800.f / 600.f,  0.001f,1000.f);
@@ -23,5 +27,5 @@ void Camera::projectionOrtho(glm::vec4 ortho, float near, float far) {
 }
 
 void Camera::projectionPerspective(float fov, float aspect, float near, float far) {
-    mProjectionMatrix = glm::perspective(fov, aspect, near, far);
+     mProjectionMatrix = glm::perspective(fov, aspect, near, far);
 }

@@ -6,13 +6,6 @@
 
 MeshNode::MeshNode()
 {
-  // TODO: This is just a dummy so we see something
-  mVertices = {
-      {{-1.0, -1.0, 0.1},{0,0,-1}},
-      {{ 1.0, -1.0, 0.1},{0,0,-1}},
-      {{ 0.0,  1.0, 0.1},{0,0,-1}},
-  };
-  mIndices = { 0, 1, 2 };
 }
 
 MeshNode::~MeshNode()

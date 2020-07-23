@@ -64,7 +64,7 @@ void Renderer::initVK() {
   // Create the pipeline, with a flag to invert the viewport height (Switch to left handed coordinate system)
   // If changing this check the compile flags for GLM_FORCE_LEFT_HANDED - The rest of the engine uses one cs
   // and the renderer should handle it
-  mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get(), false));
+  mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get(), true));
 
   // Build the graphics pipeline
   // In this case we can throw away the shader modules after building as they're only used by the one pipeline
@@ -554,18 +554,12 @@ void Renderer::frameStart() {
   // Engine will now do its thing, we'll get calls to various
   // render methods here, then frameEnd to commit the frame
 
-
-
-
-
   // TODO: Placeholder for lighting stuff
   ShaderLightData l;
-  l.colour = glm::vec4(0.8f,0.5f,0.2f, 1.f);
+  l.colour = glm::vec4(1.f,1.f,1.f, 1.f);
   l.posOrDir = glm::vec4(10.f,10.f,0.f,1.f);
   l.typeAndParams.w = static_cast<float>(Light::Type::Point);
   mLightsToRender.emplace_back(l);
-
-
 }
 
 void Renderer::frameEnd() {

@@ -7,6 +7,8 @@
 #include <exception>
 #include <iostream>
 
+#include <GLFW/glfw3.h>
+
 int main(int argc, char* argv[])
 {
   std::string modelFile;
@@ -38,12 +40,15 @@ int main(int argc, char* argv[])
     }
 
     static bool camActive = true;
+    static float camDistance = 5.0f;
 
     // Event Handling
     eng.addGlobalEventCallback([](Engine& engine, Event& e) {
       if( auto keypress = dynamic_cast<KeyPressEvent*>(&e) ) {
-        if( keypress->mKey == 256 ) engine.quit();
-        else if( keypress->mKey == ' ') camActive = !camActive;
+        if( keypress->mKey == GLFW_KEY_ESCAPE ) engine.quit();
+        else if( keypress->mKey == GLFW_KEY_SPACE) camActive = !camActive;
+        else if( keypress->mKey == GLFW_KEY_S) camDistance *= 1.05f;
+        else if( keypress->mKey == GLFW_KEY_W) camDistance *= 0.95f;
       }
     });
 
@@ -64,12 +69,14 @@ int main(int argc, char* argv[])
           }
          }
 
-        glm::vec4 camPos(0.0, 2.0, -5.0, 1.0);
+        glm::vec4 camPos(0.0, camDistance / 3.0, -camDistance, 1.0);
         glm::mat4 camRotMat(1.0f);
         camRotMat = glm::rotate(camRotMat, camRot, glm::vec3(0.0, 1.0, 0.0));
         camPos = camRotMat * camPos;
         eng.camera().lookAt(camPos, glm::vec3(0.0,0.0,0.0), glm::vec3(0.0,1.0,0.0));
     });
+
+    eng.camera().projectionPerspective(glm::radians(50.f), 800.f / 600.f, 0.01f, 1000.0f);
 
     // Start the engine!
     eng.run();
