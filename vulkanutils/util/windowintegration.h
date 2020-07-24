@@ -17,6 +17,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include "deviceinstance.h"
+#include "simpleimage.h"
 
 /**
  * Functionality for window system integration, swapchains and such
@@ -37,9 +38,12 @@ public:
   // TODO: Giving direct access like this is dangerous, clean this up
   const vk::Extent2D& extent() const { return mSwapChainExtent; }
   const vk::Format& format() const { return mSwapChainFormat; }
+  const vk::Format& depthFormat() const { return mDepthFormat; }
   const vk::SwapchainKHR& swapChain() const { return mSwapChain.get(); }
   const std::vector<vk::Image>& swapChainImages() const { return mSwapChainImages; }
   const std::vector<vk::UniqueImageView>& swapChainImageViews() const { return mSwapChainImageViews; }
+  const vk::ImageView& depthImageView() const { return mDepthImage->view(); }
+
 
 private:
 #ifdef USE_GLFW
@@ -55,6 +59,8 @@ private:
   vk::Format mSwapChainFormat = vk::Format::eUndefined;
   vk::Extent2D mSwapChainExtent;
   std::vector<vk::Image> mSwapChainImages;
+  std::unique_ptr<SimpleImage> mDepthImage;
+  vk::Format mDepthFormat;
 
   // TODO: >.< For some reason trying to use a UniqueSurfaceKHR here
   // messes up, and we end up with the wrong value for mSurface.m_owner

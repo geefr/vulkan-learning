@@ -23,9 +23,8 @@ GraphicsPipeline::GraphicsPipeline(WindowIntegration& windowIntegration, DeviceI
 void GraphicsPipeline::createRenderPass() {
   // The render pass contains stuff like what the framebuffer attachments are and things
   auto colourAttachment = vk::AttachmentDescription()
-      .setFlags({})
       .setFormat(mWindowIntegration.format())
-      .setSamples(vk::SampleCountFlagBits::e1)
+      .setSamples(mSampleCount)
       .setLoadOp(vk::AttachmentLoadOp::eClear) // What to do before rendering
       .setStoreOp(vk::AttachmentStoreOp::eStore) // What to do after rendering
       .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
@@ -33,6 +32,16 @@ void GraphicsPipeline::createRenderPass() {
       .setInitialLayout(vk::ImageLayout::eUndefined) // Image layout before render pass begins, we don't care, gonna clear anyway
       .setFinalLayout(vk::ImageLayout::ePresentSrcKHR) // Image layout to transfer to when render pass finishes, ready for presentation
       ;
+
+  auto depthAttachment = vk::AttachmentDescription()
+      .setFormat(mWindowIntegration.depthFormat())
+      .setSamples(mSampleCount)
+      .setLoadOp(vk::AttachmentLoadOp::eClear)
+      .setStoreOp(vk::AttachmentStoreOp::eDontCare)
+      .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+      .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
+      .setInitialLayout(vk::ImageLayout::eUndefined)
+      .setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
   // For starters we only need one sub-pass to draw
   // Multiple sub passes are used for multi-pass rendering
@@ -42,16 +51,19 @@ void GraphicsPipeline::createRenderPass() {
       .setAttachment(0) // Index in attachment description array (We only have one so far)
       .setLayout(vk::ImageLayout::eColorAttachmentOptimal) // Layout for the attachment during this subpass. This attachment is our colour buffer so marked as such here
       ;
+  auto depthAttachmentRef = vk::AttachmentReference()
+      .setAttachment(1)
+      .setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
   auto subpass = vk::SubpassDescription()
       .setFlags({})
       .setPipelineBindPoint(vk::PipelineBindPoint::eGraphics) // Marked as a graphics subpass, looks like we can mix multiple subpass types in one render pass?
       .setColorAttachmentCount(1)
       .setPColorAttachments(&colourAttachmentRef)
+      .setPDepthStencilAttachment(&depthAttachmentRef)
       ;
   // Index of colour attachment here matches layout = 0 in fragment shader
   // So the frag shader can reference multiple attachments as its output!
-
 
   /*
    * Setup subpass dependencies
@@ -76,10 +88,13 @@ void GraphicsPipeline::createRenderPass() {
       ;
 
   // Now let's actually make the render pass
+  std::vector<vk::AttachmentDescription> attachments;
+  attachments.emplace_back(colourAttachment);
+  attachments.emplace_back(depthAttachment);
   auto renderPassInfo = vk::RenderPassCreateInfo()
       .setFlags({})
-      .setAttachmentCount(1)
-      .setPAttachments(&colourAttachment)
+      .setAttachmentCount(attachments.size())
+      .setPAttachments(attachments.size() ? attachments.data() : nullptr)
       .setSubpassCount(1)
       .setPSubpasses(&subpass)
       .setDependencyCount(1)
@@ -107,7 +122,6 @@ void GraphicsPipeline::createPipeline() {
   uint32_t numVertexBindings = static_cast<uint32_t>(mVertexInputBindings.size());
   uint32_t numVertexAttributes = static_cast<uint32_t>(mVertexInputAttributes.size());
   auto vertInputInfo = vk::PipelineVertexInputStateCreateInfo()
-      .setFlags({})
       .setVertexBindingDescriptionCount(numVertexBindings)
       .setPVertexBindingDescriptions(numVertexBindings ? mVertexInputBindings.data() : nullptr)
       .setVertexAttributeDescriptionCount(numVertexAttributes)
@@ -117,7 +131,6 @@ void GraphicsPipeline::createPipeline() {
   // Input assembly
   // Typical triangles setup
   auto inputAssInfo = vk::PipelineInputAssemblyStateCreateInfo()
-      .setFlags({})
       .setTopology(mInputAssemblyPrimitiveTopology)
       .setPrimitiveRestartEnable(false)
       ;
@@ -158,17 +171,21 @@ void GraphicsPipeline::createPipeline() {
   // Multisampling
   auto multisampleInfo = vk::PipelineMultisampleStateCreateInfo()
       .setSampleShadingEnable(false)
-      .setRasterizationSamples(vk::SampleCountFlagBits::e1);
+      .setRasterizationSamples(mSampleCount);
 
   // Depth/Stencil test
-  // Not yet, we're gonna pass null for this one ;)
+  auto depthStencil = vk::PipelineDepthStencilStateCreateInfo()
+      .setDepthTestEnable(true)
+      .setDepthWriteEnable(true)
+      .setDepthCompareOp(vk::CompareOp::eLess)
+      .setDepthBoundsTestEnable(false)
+      .setStencilTestEnable(false);
 
-  // Colour blending
+  // Colour & alpha blending
   // attachment state is per-framebuffer
-  // creat info is global to the pipeline
+  // create info is global to the pipeline
   auto colourBlendAttach = vk::PipelineColorBlendAttachmentState()
       .setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
-      .setBlendEnable(false)
       .setBlendEnable(true)
       .setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha)
       .setDstColorBlendFactor(vk::BlendFactor::eOneMinusDstAlpha)
@@ -220,7 +237,7 @@ void GraphicsPipeline::createPipeline() {
       .setPViewportState(&viewportInfo)
       .setPRasterizationState(&rasterisationInfo)
       .setPMultisampleState(&multisampleInfo)
-      .setPDepthStencilState(nullptr)
+      .setPDepthStencilState(&depthStencil)
       .setPColorBlendState(&colourBlendInfo)
       .setPDynamicState(nullptr)
       .setLayout(mPipelineLayout.get())

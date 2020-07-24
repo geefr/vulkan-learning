@@ -68,12 +68,33 @@ public:
   // Buffer/etc creation functions
   vk::UniqueCommandPool createCommandPool( vk::CommandPoolCreateFlags flags, DeviceInstance::QueueRef& queue );
   vk::UniqueBuffer createBuffer( vk::DeviceSize size, vk::BufferUsageFlags usageFlags );
+  vk::UniqueImage createImage(
+      vk::ImageType type, vk::Format format, vk::Extent3D extent,
+      uint32_t mipLevels, uint32_t arrayLayers, vk::SampleCountFlagBits sampleCountFlags, vk::ImageTiling tiling,
+      vk::ImageUsageFlags usageFlags, vk::SharingMode sharingMode, std::vector<uint32_t> queueFamilies,
+      vk::ImageLayout layout );
+  vk::UniqueImageView createImageView(
+      const vk::UniqueImage& image,
+      vk::ImageViewType type,
+      vk::Format format,
+      vk::ImageAspectFlags aspectFlags,
+      uint32_t baseMipLevel = 0,
+      uint32_t mipLevels = 1,
+      uint32_t baseArrayLayer = 0,
+      uint32_t arrayLayerCount = 1);
+
+  /// Determine a decent format for a depth buffer
+  vk::Format getDepthBufferFormat();
   /// Select a device memory heap based on flags (vk::MemoryRequirements::memoryTypeBits)
   uint32_t selectDeviceMemoryHeap( vk::MemoryRequirements memoryRequirements, vk::MemoryPropertyFlags requiredFlags );
   /// Allocate device memory suitable for the specified buffer
   vk::UniqueDeviceMemory allocateDeviceMemoryForBuffer( vk::Buffer& buffer, vk::MemoryPropertyFlags userReqs );
+  /// Allocate device memory for an image
+  vk::UniqueDeviceMemory allocateDeviceMemoryForImage( const vk::UniqueImage& image, vk::MemoryPropertyFlags userReqs );
   /// Bind memory to a buffer
   void bindMemoryToBuffer(vk::Buffer& buffer, vk::DeviceMemory& memory, vk::DeviceSize offset);
+  /// Or to an image
+  void bindMemoryToImage(const vk::UniqueImage& image, const vk::UniqueDeviceMemory& memory, vk::DeviceSize offset);
   /// Map a region of device memory to host memory
   void* mapMemory( vk::DeviceMemory& deviceMem, vk::DeviceSize offset, vk::DeviceSize size );
   /// Unmap a region of device memory

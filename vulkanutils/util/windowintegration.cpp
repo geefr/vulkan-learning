@@ -23,6 +23,7 @@ WindowIntegration::WindowIntegration(GLFWwindow* window, DeviceInstance& deviceI
 
 WindowIntegration::~WindowIntegration() {
   for(auto& p : mSwapChainImageViews) p.reset();
+  mDepthImage.reset();
   mSwapChain.reset();
   vkDestroySurfaceKHR(mDeviceInstance.instance(), mSurface, nullptr);
 }
@@ -94,6 +95,22 @@ void WindowIntegration::createSwapChain(DeviceInstance::QueueRef& queue) {
 
   mSwapChain = mDeviceInstance.device().createSwapchainKHRUnique(info);
   mSwapChainImages = mDeviceInstance.device().getSwapchainImagesKHR(mSwapChain.get());
+
+  mDepthFormat = mDeviceInstance.getDepthBufferFormat();
+
+  // Create depth buffer resources
+  mDepthImage.reset(new SimpleImage(
+                      mDeviceInstance,
+                      vk::ImageType::e2D,
+                      vk::ImageViewType::e2D,
+                      mDepthFormat,
+                      {mSwapChainExtent.width, mSwapChainExtent.height, 1},
+                      1,
+                      1,
+                      vk::SampleCountFlagBits::e1,
+                      vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                      vk::ImageLayout::eDepthAttachmentOptimal
+  ));
 }
 
 void WindowIntegration::createSwapChainImageViews() {

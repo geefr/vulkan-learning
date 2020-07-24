@@ -156,15 +156,17 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   commandBuffer.begin(beginInfo);
 
   // Start the render pass
-  // Info for attachment load op clear
-  std::array<float, 4> col = { 0.f,.0f,0.f,1.f };
-  vk::ClearValue clearColour(col);
+  // Clear colour/depth buffers at the start
+  std::array<vk::ClearValue, 2> clearVals;
+  std::array<float, 4> clearColour = { 0.f,.0f,0.f,1.f };
+  clearVals[0].color = vk::ClearColorValue(clearColour);
+  clearVals[1].depthStencil = vk::ClearDepthStencilValue(1.f, 0);
 
   auto renderPassInfo = vk::RenderPassBeginInfo()
     .setRenderPass(mGraphicsPipeline->renderPass())
     .setFramebuffer(frameBuffer)
-    .setClearValueCount(1)
-    .setPClearValues(&clearColour);
+    .setClearValueCount(clearVals.size())
+    .setPClearValues(clearVals.data());
   renderPassInfo.renderArea.offset = vk::Offset2D(0, 0);
   renderPassInfo.renderArea.extent = mWindowIntegration->extent();
 
@@ -572,15 +574,15 @@ void Renderer::frameEnd() {
     static std::once_flag windowShown;
     std::call_once(windowShown, [&win = mWindow]() {glfwShowWindow(win); });
 
-    // Wait for the last frame to finish rendering
-    mDeviceInstance->device().waitForFences(1, &mFrameInFlightFences[frameIndex].get(), true, std::numeric_limits<uint64_t>::max());
-
     // Advance to next frame index, loop at max
     frameIndex++;
     if (frameIndex == mMaxFramesInFlight) frameIndex = 0;
 
     // Reset the fence - fences must be reset before being submitted
+    // And when resetting the fence can't be associated with any currently running/not finished commands
     auto frameFence = mFrameInFlightFences[frameIndex].get();
+    // Wait for anything to finish from the last use of this fence (n frames ago)
+    mDeviceInstance->device().waitForFences(1, &frameFence, true, std::numeric_limits<uint64_t>::max());
     mDeviceInstance->device().resetFences(1, &frameFence);
 
     // Acquire and image from the swap chain

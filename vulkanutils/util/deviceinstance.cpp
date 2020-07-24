@@ -208,6 +208,79 @@ vk::UniqueBuffer DeviceInstance::createBuffer( vk::DeviceSize size, vk::BufferUs
   return mDevice->createBufferUnique(info);
 }
 
+vk::UniqueImage DeviceInstance::createImage(
+    vk::ImageType type, vk::Format format, vk::Extent3D extent,
+    uint32_t mipLevels, uint32_t arrayLayers, vk::SampleCountFlagBits sampleCountFlags, vk::ImageTiling tiling,
+    vk::ImageUsageFlags usageFlags, vk::SharingMode sharingMode, std::vector<uint32_t> queueFamilies,
+    vk::ImageLayout layout) {
+
+  auto info = vk::ImageCreateInfo()
+    // .setFlags() Support for sparse images (Ones where not all the memory is allocated)
+    .setImageType(type)
+    .setFormat(format)
+    .setExtent(extent)
+    .setMipLevels(mipLevels)
+    .setArrayLayers(arrayLayers)
+    .setSamples(sampleCountFlags)
+    .setTiling(tiling)
+    .setUsage(usageFlags)
+    .setSharingMode(sharingMode)
+    .setQueueFamilyIndexCount(queueFamilies.size())
+    .setPQueueFamilyIndices( queueFamilies.size() ? queueFamilies.data() : nullptr )
+    .setInitialLayout(layout);
+
+  return mDevice->createImageUnique(info);
+}
+
+vk::UniqueImageView DeviceInstance::createImageView(
+    const vk::UniqueImage& image,
+    vk::ImageViewType type,
+    vk::Format format,
+    vk::ImageAspectFlags aspectFlags,
+    uint32_t baseMipLevel,
+    uint32_t mipLevels,
+    uint32_t baseArrayLayer,
+    uint32_t arrayLayerCount
+    ) {
+
+  auto subResourceRange = vk::ImageSubresourceRange()
+      .setAspectMask(aspectFlags)
+      .setBaseMipLevel(baseMipLevel)
+      .setLevelCount(mipLevels)
+      .setBaseArrayLayer(baseArrayLayer)
+      .setLayerCount(arrayLayerCount);
+
+  auto info = vk::ImageViewCreateInfo()
+      .setImage(image.get())
+      .setViewType(type)
+      .setFormat(format)
+      .setSubresourceRange(subResourceRange);
+      // .setComponents() Remapping of colour channels
+      ;
+  return mDevice->createImageViewUnique(info);
+}
+
+vk::Format DeviceInstance::getDepthBufferFormat() {
+  std::vector<vk::Format> desiredFormats = {
+    vk::Format::eD32Sfloat,
+    vk::Format::eD32SfloatS8Uint,
+    vk::Format::eD24UnormS8Uint
+  };
+  auto depthFormatFlags = vk::FormatFeatureFlagBits::eDepthStencilAttachment;
+
+  auto it = desiredFormats.begin();
+  while( it != desiredFormats.end() ) {
+      // TODO: shouldn't just use the first physical device, but that's what the rest of the class does
+      auto deviceFormatProps = mPhysicalDevices[0].getFormatProperties(*it);
+      if( deviceFormatProps.optimalTilingFeatures & depthFormatFlags) {
+          // Found a working format
+          break;
+      }
+  }
+  if( it == desiredFormats.end() ) throw std::runtime_error("Failed to select format for depth buffer");
+  return *it;
+}
+
 /// Select a device memory heap based on flags (vk::MemoryRequirements::memoryTypeBits)
 uint32_t DeviceInstance::selectDeviceMemoryHeap( vk::MemoryRequirements memoryRequirements, vk::MemoryPropertyFlags requiredFlags ) {
   // Initial implementation doesn't have any real requirements, just select the first compatible heap
@@ -229,13 +302,26 @@ uint32_t DeviceInstance::selectDeviceMemoryHeap( vk::MemoryRequirements memoryRe
 vk::UniqueDeviceMemory DeviceInstance::allocateDeviceMemoryForBuffer( vk::Buffer& buffer, vk::MemoryPropertyFlags userReqs ) {
   // Find out what kind of memory the buffer needs
   vk::MemoryRequirements memReq = mDevice->getBufferMemoryRequirements(buffer);
-
   auto heapIdx = selectDeviceMemoryHeap(memReq, userReqs );
   auto info = vk::MemoryAllocateInfo()
       .setAllocationSize(memReq.size)
       .setMemoryTypeIndex(heapIdx);
-
   return mDevice->allocateMemoryUnique(info);
+}
+
+
+vk::UniqueDeviceMemory DeviceInstance::allocateDeviceMemoryForImage( const vk::UniqueImage& image, vk::MemoryPropertyFlags userReqs ) {
+  // Find out what kind of memory the image needs
+  auto memReq = mDevice->getImageMemoryRequirements(image.get());
+  auto heapIdx = selectDeviceMemoryHeap(memReq, userReqs );
+  auto info = vk::MemoryAllocateInfo()
+      .setAllocationSize(memReq.size)
+      .setMemoryTypeIndex(heapIdx);
+  return mDevice->allocateMemoryUnique(info);
+}
+
+void DeviceInstance::bindMemoryToImage(const vk::UniqueImage& image, const vk::UniqueDeviceMemory& memory, vk::DeviceSize offset) {
+  mDevice->bindImageMemory(image.get(), memory.get(), offset);
 }
 
 /// Bind memory to a buffer

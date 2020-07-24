@@ -6,6 +6,8 @@ include_directories( ${CMAKE_CURRENT_SOURCE_DIR}
 add_library( vulkanutils ${LIB_TYPE}
   util/simplebuffer.h
   util/simplebuffer.cpp
+  util/simpleimage.h
+  util/simpleimage.cpp
   util/util.h
   util/util.cpp
   util/windowintegration.h
