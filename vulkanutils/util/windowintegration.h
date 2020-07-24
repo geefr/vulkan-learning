@@ -26,18 +26,18 @@ class WindowIntegration
 {
 public:
   WindowIntegration() = delete;
-  WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, vk::PresentModeKHR presentMode = vk::PresentModeKHR::eFifo);
+  WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue);
   WindowIntegration(const WindowIntegration&) = delete;
   WindowIntegration(WindowIntegration&&) = default;
   ~WindowIntegration();
 
 #ifdef USE_GLFW
-  WindowIntegration(GLFWwindow* window, DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, vk::PresentModeKHR presentMode = vk::PresentModeKHR::eFifo);
+  WindowIntegration(GLFWwindow* window, DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue);
 #endif
 
   // TODO: Giving direct access like this is dangerous, clean this up
   const vk::Extent2D& extent() const { return mSwapChainExtent; }
-  const vk::Format& format() const { return mSwapChainFormat; }
+  const vk::Format& format() const { return mSwapChainFormat.format; }
   const vk::Format& depthFormat() const { return mDepthFormat; }
   const vk::SwapchainKHR& swapChain() const { return mSwapChain.get(); }
   const std::vector<vk::Image>& swapChainImages() const { return mSwapChainImages; }
@@ -48,16 +48,22 @@ public:
 private:
 #ifdef USE_GLFW
   void createSurfaceGLFW(GLFWwindow* window);
+  GLFWwindow* mGLFWWindow = nullptr;
 #endif
 
   void createSwapChain(DeviceInstance::QueueRef& queue);
   void createSwapChainImageViews();
 
+  vk::SurfaceFormatKHR chooseSwapChainFormat(std::vector<vk::SurfaceFormatKHR> formats) const;
+  vk::PresentModeKHR chooseSwapChainPresentMode(std::vector<vk::PresentModeKHR> presentModes) const;
+  vk::Extent2D chooseSwapChainExtent(vk::SurfaceCapabilitiesKHR caps) const;
+
   DeviceInstance& mDeviceInstance;
 
   // These members 'owned' by the unique pointers below
-  vk::Format mSwapChainFormat = vk::Format::eUndefined;
+  vk::SurfaceFormatKHR mSwapChainFormat;
   vk::Extent2D mSwapChainExtent;
+  vk::PresentModeKHR mSwapPresentMode;
   std::vector<vk::Image> mSwapChainImages;
   std::unique_ptr<SimpleImage> mDepthImage;
   vk::Format mDepthFormat;
@@ -75,7 +81,6 @@ private:
   // will be destructed in reverse order
   vk::UniqueSwapchainKHR mSwapChain;
   std::vector<vk::UniqueImageView> mSwapChainImageViews;
-  vk::PresentModeKHR mPresentMode;
 };
 
 #endif // WINDOWINTEGRATION_H

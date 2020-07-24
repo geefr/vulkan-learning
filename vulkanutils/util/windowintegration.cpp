@@ -9,17 +9,19 @@
 
 #include <iostream>
 
-WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, vk::PresentModeKHR presentMode)
-  : mDeviceInstance(deviceInstance)
-  , mPresentMode(presentMode) {
+WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue)
+  : mDeviceInstance(deviceInstance) {
 }
 
-WindowIntegration::WindowIntegration(GLFWwindow* window, DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, vk::PresentModeKHR presentMode)
-  : WindowIntegration(deviceInstance, queue, presentMode) {
+#ifdef USE_GLFW
+WindowIntegration::WindowIntegration(GLFWwindow* window, DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue)
+  : WindowIntegration(deviceInstance, queue) {
+  mGLFWWindow = window;
   createSurfaceGLFW(window);
   createSwapChain(queue);
   createSwapChainImageViews();
 }
+#endif
 
 WindowIntegration::~WindowIntegration() {
   for(auto& p : mSwapChainImageViews) p.reset();
@@ -56,11 +58,12 @@ void WindowIntegration::createSwapChain(DeviceInstance::QueueRef& queue) {
   }
 
   // Ideally we want full alpha support
-  auto alphaMode = vk::CompositeAlphaFlagBitsKHR::ePreMultiplied; // TODO: Pre or post? can't remember the difference
-  if( !(caps.supportedCompositeAlpha & alphaMode) ) {
-    std::cerr << "Surface doesn't support full alpha, falling back to opaque" << std::endl;
-    alphaMode = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-  }
+//  auto alphaMode = vk::CompositeAlphaFlagBitsKHR::ePreMultiplied; // TODO: Pre or post? can't remember the difference
+//  if( !(caps.supportedCompositeAlpha & alphaMode) ) {
+//    std::cerr << "Surface doesn't support full alpha, falling back to opaque" << std::endl;
+//    alphaMode = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+//  }
+  auto alphaMode = vk::CompositeAlphaFlagBitsKHR::eOpaque;
 
   auto imageUsage = vk::ImageUsageFlags(vk::ImageUsageFlagBits::eColorAttachment);
   if( !(caps.supportedUsageFlags & imageUsage) ) throw std::runtime_error("Surface doesn't support color attachment");
@@ -71,24 +74,26 @@ void WindowIntegration::createSwapChain(DeviceInstance::QueueRef& queue) {
   // caps.supportedTransforms;
 
   // Choose a pixel format
-  auto surfaceFormats = mDeviceInstance.physicalDevice().getSurfaceFormatsKHR(mSurface);
-  // TODO: Just choosing the first one here..
-  mSwapChainFormat = surfaceFormats.front().format;
-  auto chosenColourSpace = surfaceFormats.front().colorSpace;
-  mSwapChainExtent = caps.currentExtent;
+  auto formats = mDeviceInstance.physicalDevice().getSurfaceFormatsKHR(mSurface);
+  auto presentModes = mDeviceInstance.physicalDevice().getSurfacePresentModesKHR(mSurface);
+
+  mSwapChainFormat = chooseSwapChainFormat(formats);
+  // mSwapPresentMode = chooseSwapChainPresentMode(presentModes);
+  mSwapPresentMode = vk::PresentModeKHR::eImmediate;
+  mSwapChainExtent = chooseSwapChainExtent(caps);
+
   auto info = vk::SwapchainCreateInfoKHR()
-      .setFlags({})
       .setSurface(mSurface)
       .setMinImageCount(numImages)
-      .setImageFormat(mSwapChainFormat)
-      .setImageColorSpace(chosenColourSpace)
+      .setImageFormat(mSwapChainFormat.format)
+      .setImageColorSpace(mSwapChainFormat.colorSpace)
       .setImageExtent(mSwapChainExtent)
       .setImageArrayLayers(1)
       .setImageUsage(imageUsage)
-      .setImageSharingMode(vk::SharingMode::eExclusive)
+      .setImageSharingMode(vk::SharingMode::eExclusive) // Fine if using a single queue for graphics & present
       .setPreTransform(caps.currentTransform)
       .setCompositeAlpha(alphaMode)
-      .setPresentMode(mPresentMode)
+      .setPresentMode(mSwapPresentMode)
       .setClipped(true)
       .setOldSwapchain({})
       ;
@@ -119,7 +124,7 @@ void WindowIntegration::createSwapChainImageViews() {
         .setFlags({})
         .setImage(mSwapChainImages[i])
         .setViewType(vk::ImageViewType::e2D)
-        .setFormat(mSwapChainFormat)
+        .setFormat(mSwapChainFormat.format)
         .setComponents({})
         .setSubresourceRange({{vk::ImageAspectFlagBits::eColor},0, 1, 0, 1})
         ;
@@ -127,3 +132,48 @@ void WindowIntegration::createSwapChainImageViews() {
   }
 }
 
+vk::SurfaceFormatKHR WindowIntegration::chooseSwapChainFormat(std::vector<vk::SurfaceFormatKHR> formats) const {
+  // Ideally we want 32-bit srgb
+  for( auto& format : formats ) {
+      if( format.format == vk::Format::eB8G8R8A8Srgb &&
+          format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear ) {
+          return format;
+        }
+  }
+  // TODO: Should rank the remaining ones on preference
+  // for now just use the first option
+  return formats.front();
+}
+
+vk::PresentModeKHR WindowIntegration::chooseSwapChainPresentMode(std::vector<vk::PresentModeKHR> presentModes) const {
+  // Present mode is really important - The conditions for showing image on the screen.
+  // - immediate - No delay, may cause tearing
+  // - fifo - vsync/at at vblank, double buffered
+  // - fifo_relaxed - lazy vsync, may cause tearing but reduce stutters?
+  // - mailbox - vsync, triple buffered
+  for( auto& mode : presentModes ) {
+      if( mode == vk::PresentModeKHR::eMailbox ) return mode;
+  }
+  // Guaranteed to be supported
+  return vk::PresentModeKHR::eFifo;
+}
+
+vk::Extent2D WindowIntegration::chooseSwapChainExtent(vk::SurfaceCapabilitiesKHR caps) const {
+  // The size of the swapchain images
+  // uint max is a special value from some window managers, means we're allowed to have a different
+  // dimensions here than the actual window.
+  if( caps.currentExtent.width != std::numeric_limits<uint32_t>::max() ) {
+      return caps.currentExtent;
+  } else {
+#ifdef USE_GLFW
+    int width, height;
+    glfwGetFramebufferSize(mGLFWWindow, &width, &height);
+    return {
+      std::max( caps.minImageExtent.width, std::min(caps.maxImageExtent.width, static_cast<uint32_t>(width))),
+      std::max( caps.minImageExtent.height, std::min(caps.maxImageExtent.height, static_cast<uint32_t>(height)))
+    };
+#else
+#error "only GLFW Window Integration is available right now"
+#endif
+  }
+}

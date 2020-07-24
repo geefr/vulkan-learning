@@ -132,6 +132,7 @@ void DeviceInstance::createLogicalDevice(std::vector<vk::QueueFlags> qFlags) {
   // Allows the viewport to be flipped, core in vk 1.1
   enabledDeviceExtensions.emplace_back("VK_KHR_maintenance1");
 #if defined(VK_USE_PLATFORM_WIN32_KHR) || defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_LIB_XCB_KHR) || defined(USE_GLFW)
+  // If building with UI support we need the swapchain extension - allows presenting images to the window
   enabledDeviceExtensions.push_back("VK_KHR_swapchain");
   for( auto& e : enabledDeviceExtensions ) Util::ensureExtension(supportedExtensions, e);
 #endif
