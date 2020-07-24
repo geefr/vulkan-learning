@@ -177,9 +177,15 @@ private:
   // as we can't modify it when it's already in use for rendering
   // a frame
   uint32_t mMaxFramesInFlight = 3u;
+  uint32_t mFrameIndex = 0u;
   std::vector<vk::UniqueSemaphore> mImageAvailableSemaphores;
   std::vector<vk::UniqueSemaphore> mRenderFinishedSemaphores;
-  std::vector<vk::UniqueFence> mFrameInFlightFences;
+  // A fence for each of the in-flight frames
+  std::vector<vk::UniqueFence> mInFlightFences;
+  // Tracking of fences against swapchain images
+  // The fence for an image in the chain will be set to one of the
+  // in flight fences when frame is submitted.
+  std::vector<vk::Fence> mImagesInFlightFences;
   std::vector<std::unique_ptr<SimpleBuffer>> mUBOPerFrameInFlight;
 
   // Push constants can be updated at any point however

@@ -60,6 +60,7 @@ void Renderer::initVK() {
   // To do this we also need to specify how many queues from which families we want to create
   // In this case just 1 queue from the first family which supports graphics
   mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mQueue));
+  mMaxFramesInFlight = mWindowIntegration->swapChainImages().size();
 
   // Create the pipeline, with a flag to invert the viewport height (Switch to left handed coordinate system)
   // If changing this check the compile flags for GLM_FORCE_LEFT_HANDED - The rest of the engine uses one cs
@@ -122,8 +123,9 @@ void Renderer::initVK() {
     mImageAvailableSemaphores.emplace_back(mDeviceInstance->device().createSemaphoreUnique({}));
     mRenderFinishedSemaphores.emplace_back(mDeviceInstance->device().createSemaphoreUnique({}));
     // Create fence in signalled state so first wait immediately returns and resets fence
-    mFrameInFlightFences.emplace_back(mDeviceInstance->device().createFenceUnique({ vk::FenceCreateFlagBits::eSignaled }));
+    mInFlightFences.emplace_back(mDeviceInstance->device().createFenceUnique({ vk::FenceCreateFlagBits::eSignaled }));
   }
+  mImagesInFlightFences.resize(mMaxFramesInFlight);
 
   // Create UBOs for per-frame data
   // and any defaults needed for materials/mesh data
@@ -148,7 +150,6 @@ void Renderer::initVK() {
 }
 
 void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer, uint32_t frameIndex) {
-
   auto beginInfo = vk::CommandBufferBeginInfo()
     .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution
     .setPInheritanceInfo(nullptr)
@@ -569,30 +570,42 @@ void Renderer::frameEnd() {
   // vulkan.hpp throws exceptions by default, in release they might be disabled by CMake
   try
   {
-    auto frameIndex = 0u;
-
     static std::once_flag windowShown;
     std::call_once(windowShown, [&win = mWindow]() {glfwShowWindow(win); });
 
     // Advance to next frame index, loop at max
-    frameIndex++;
-    if (frameIndex == mMaxFramesInFlight) frameIndex = 0;
+    mFrameIndex++;
+    if (mFrameIndex == mMaxFramesInFlight) mFrameIndex = 0;
 
-    // Reset the fence - fences must be reset before being submitted
-    // And when resetting the fence can't be associated with any currently running/not finished commands
-    auto frameFence = mFrameInFlightFences[frameIndex].get();
-    // Wait for anything to finish from the last use of this fence (n frames ago)
+    // Wait until any previous runs of this frame have finished
+    auto frameFence = mInFlightFences[mFrameIndex].get();
     mDeviceInstance->device().waitForFences(1, &frameFence, true, std::numeric_limits<uint64_t>::max());
-    mDeviceInstance->device().resetFences(1, &frameFence);
 
-    // Acquire and image from the swap chain
+    // Acquire an image from the swap chain
+    // Important: The image index will probably not match the frame index - If the gpu can empty
+    // the swap chain we'll probably just get the 1st/2nd ones, with any others being rarely used.
     auto imageIndex = mDeviceInstance->device().acquireNextImageKHR(
       mWindowIntegration->swapChain(), // Get an image from this
       std::numeric_limits<uint64_t>::max(), // Don't timeout
-      mImageAvailableSemaphores[frameIndex].get(), // semaphore to signal once presentation is finished with the image
+      mImageAvailableSemaphores[mFrameIndex].get(), // semaphore to signal once presentation is finished with the image
       vk::Fence()).value; // Dummy fence, we don't care here
 
-  // Submit the command buffer
+    std::cerr << "Renderer::frameEnd: Frame " << mFrameIndex << " image " << imageIndex << std::endl;
+
+    // TODO: This can return 'out of date', meaning we need to recreate the swapchain
+    // Currently we'll just terminate when this happens
+
+    // TODO: We should perform buffer updates and such here
+    // before waiting on the swapchain image's fence
+
+    // If there's already a fence for the image wait, something is still
+    // using it
+    if( mImagesInFlightFences[imageIndex] != vk::Fence() ) {
+      mDeviceInstance->device().waitForFences(1, &mImagesInFlightFences[imageIndex], true, std::numeric_limits<uint64_t>::max());
+    }
+    mImagesInFlightFences[imageIndex] = frameFence;
+
+    // Submit the command buffer
     vk::SubmitInfo submitInfo = {};
     auto commandBuffer = mCommandBuffers[imageIndex].get();
     auto frameBuffer = mFrameBuffer->frameBuffers()[imageIndex].get();
@@ -601,21 +614,17 @@ void Renderer::frameEnd() {
     // This isn't the most efficient but we're at least re-using the command buffer
     // In a most complex application we would have multiple command buffers and only rebuild
     // the section that needs changing..I think
-    buildCommandBuffer(commandBuffer, frameBuffer, frameIndex);
+    buildCommandBuffer(commandBuffer, frameBuffer, mFrameIndex);
 
     // Don't execute until this is ready
-    vk::Semaphore waitSemaphores[] = { mImageAvailableSemaphores[frameIndex].get() };
+    vk::Semaphore waitSemaphores[] = { mImageAvailableSemaphores[mFrameIndex].get() };
     // place the wait before writing to the colour attachment
 
     // If we have render pass depedencies
     vk::PipelineStageFlags waitStages[]{ vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
-    // Otherwise wait until the pipeline starts to allow reading?
-    //vk::PipelineStageFlags waitStages[] {vk::PipelineStageFlagBits::eTopOfPipe};
-
-
     // Signal this semaphore when rendering is done
-    vk::Semaphore signalSemaphores[] = { mRenderFinishedSemaphores[frameIndex].get() };
+    vk::Semaphore signalSemaphores[] = { mRenderFinishedSemaphores[mFrameIndex].get() };
     submitInfo.setWaitSemaphoreCount(1)
       .setPWaitSemaphores(waitSemaphores)
       .setPWaitDstStageMask(waitStages)
@@ -624,6 +633,9 @@ void Renderer::frameEnd() {
       .setSignalSemaphoreCount(1)
       .setPSignalSemaphores(signalSemaphores)
       ;
+
+    // Reset the fence before it gets used
+    mDeviceInstance->device().resetFences(1, &frameFence);
 
     vk::ArrayProxy<vk::SubmitInfo> submits(submitInfo);
     // submit, signal the frame fence at the end
@@ -643,6 +655,9 @@ void Renderer::frameEnd() {
     // TODO: Currently using a single queue for both graphics and present
     // Some systems may not be able to support this
     mQueue->queue.presentKHR(presentInfo);
+
+    // TODO: present can return failures for out of date/suboptimal, need to
+    // recreate the swap chain in that case
   }
   catch (vk::Error& e) {
     std::cerr << "Renderer::frameEnd: vk::Error: " << e.what() << std::endl;
@@ -672,7 +687,8 @@ void Renderer::cleanup() {
   mMeshRenderData.clear();
   mUBOPerFrameInFlight.clear();
   
-  mFrameInFlightFences.clear();
+  mImagesInFlightFences.clear();
+  mInFlightFences.clear();
   mRenderFinishedSemaphores.clear();
   mImageAvailableSemaphores.clear();
 
