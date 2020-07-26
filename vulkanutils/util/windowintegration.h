@@ -38,12 +38,13 @@ public:
   // TODO: Giving direct access like this is dangerous, clean this up
   const vk::Extent2D& extent() const { return mSwapChainExtent; }
   const vk::Format& format() const { return mSwapChainFormat.format; }
-  const vk::Format& depthFormat() const { return mDepthFormat; }
+
+  const size_t swapChainSize() const { return mSwapChainImages.size(); }
   const vk::SwapchainKHR& swapChain() const { return mSwapChain.get(); }
   const std::vector<vk::Image>& swapChainImages() const { return mSwapChainImages; }
   const std::vector<vk::UniqueImageView>& swapChainImageViews() const { return mSwapChainImageViews; }
   const vk::ImageView& depthImageView() const { return mDepthImage->view(); }
-
+  const vk::Format& depthFormat() const { return mDepthFormat; }
 
 private:
 #ifdef USE_GLFW
@@ -53,6 +54,7 @@ private:
 
   void createSwapChain(DeviceInstance::QueueRef& queue);
   void createSwapChainImageViews();
+  void createDepthResources();
 
   vk::SurfaceFormatKHR chooseSwapChainFormat(std::vector<vk::SurfaceFormatKHR> formats) const;
   vk::PresentModeKHR chooseSwapChainPresentMode(std::vector<vk::PresentModeKHR> presentModes) const;

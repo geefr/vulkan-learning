@@ -20,6 +20,7 @@ WindowIntegration::WindowIntegration(GLFWwindow* window, DeviceInstance& deviceI
   createSurfaceGLFW(window);
   createSwapChain(queue);
   createSwapChainImageViews();
+  createDepthResources();
 }
 #endif
 
@@ -52,31 +53,18 @@ void WindowIntegration::createSwapChain(DeviceInstance::QueueRef& queue) {
   auto numImages = 3u; // We want 3
   if( caps.minImageCount != 0 ) numImages = std::max(numImages, caps.minImageCount);
   if( caps.maxImageCount != 0 ) numImages = std::min(numImages, caps.maxImageCount);
-  std::cerr << "Created swapchain containing " << numImages << " images" << std::endl;
 
-  // Ideally we want full alpha support
-//  auto alphaMode = vk::CompositeAlphaFlagBitsKHR::ePreMultiplied; // TODO: Pre or post? can't remember the difference
-//  if( !(caps.supportedCompositeAlpha & alphaMode) ) {
-//    std::cerr << "Surface doesn't support full alpha, falling back to opaque" << std::endl;
-//    alphaMode = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-//  }
   auto alphaMode = vk::CompositeAlphaFlagBitsKHR::eOpaque;
 
   auto imageUsage = vk::ImageUsageFlags(vk::ImageUsageFlagBits::eColorAttachment);
   if( !(caps.supportedUsageFlags & imageUsage) ) throw std::runtime_error("Surface doesn't support color attachment");
-
-  // caps.maxImageArrayLayers;
-  // caps.minImageExtent;
-  // caps.currentTransform;
-  // caps.supportedTransforms;
 
   // Choose a pixel format
   auto formats = mDeviceInstance.physicalDevice().getSurfaceFormatsKHR(mSurface);
   auto presentModes = mDeviceInstance.physicalDevice().getSurfacePresentModesKHR(mSurface);
 
   mSwapChainFormat = chooseSwapChainFormat(formats);
-  // mSwapPresentMode = chooseSwapChainPresentMode(presentModes);
-  mSwapPresentMode = vk::PresentModeKHR::eImmediate;
+  mSwapPresentMode = chooseSwapChainPresentMode(presentModes);
   mSwapChainExtent = chooseSwapChainExtent(caps);
 
   auto info = vk::SwapchainCreateInfoKHR()
@@ -97,35 +85,37 @@ void WindowIntegration::createSwapChain(DeviceInstance::QueueRef& queue) {
 
   mSwapChain = mDeviceInstance.device().createSwapchainKHRUnique(info);
   mSwapChainImages = mDeviceInstance.device().getSwapchainImagesKHR(mSwapChain.get());
+}
 
+void WindowIntegration::createDepthResources() {
   mDepthFormat = mDeviceInstance.getDepthBufferFormat();
 
   // Create depth buffer resources
+  // Depth image must be 2D, same size as colour buffers, sensible format, and device local
   mDepthImage.reset(new SimpleImage(
-                      mDeviceInstance,
-                      vk::ImageType::e2D,
-                      vk::ImageViewType::e2D,
-                      mDepthFormat,
-                      {mSwapChainExtent.width, mSwapChainExtent.height, 1},
-                      1,
-                      1,
-                      vk::SampleCountFlagBits::e1,
-                      vk::ImageUsageFlagBits::eDepthStencilAttachment,
-                      vk::ImageLayout::eDepthAttachmentOptimal
-  ));
+                        mDeviceInstance,
+                        vk::ImageType::e2D,
+                        vk::ImageViewType::e2D,
+                        mDepthFormat,
+                        {mSwapChainExtent.width, mSwapChainExtent.height, 1},
+                        1,
+                        1,
+                        vk::SampleCountFlagBits::e1,
+                        vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                        vk::MemoryPropertyFlagBits::eDeviceLocal,
+                        vk::ImageAspectFlagBits::eDepth
+    ));
 }
 
 void WindowIntegration::createSwapChainImageViews() {
   for( auto i = 0u; i < mSwapChainImages.size(); ++i ) {
-    auto info = vk::ImageViewCreateInfo()
-        .setFlags({})
-        .setImage(mSwapChainImages[i])
-        .setViewType(vk::ImageViewType::e2D)
-        .setFormat(mSwapChainFormat.format)
-        .setComponents({})
-        .setSubresourceRange({{vk::ImageAspectFlagBits::eColor},0, 1, 0, 1})
-        ;
-    mSwapChainImageViews.emplace_back( mDeviceInstance.device().createImageViewUnique(info) );
+
+    mSwapChainImageViews.emplace_back(
+          mDeviceInstance.createImageView(
+            mSwapChainImages[i],
+            vk::ImageViewType::e2D,
+            mSwapChainFormat.format,
+            vk::ImageAspectFlagBits::eColor));
   }
 }
 

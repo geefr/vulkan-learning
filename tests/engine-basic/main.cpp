@@ -54,7 +54,7 @@ int main(int argc, char* argv[])
 
 
     // A global per-update call (TODO: Just hooking the root node here, may be better as a bunch of callback on the engine, independent of the node graph?)
-    eng.nodegraph()->updateScript([](Engine& eng, Node&, double deltaT) {
+    eng.nodegraph()->updateScript([](Engine& e, Node&, double deltaT) {
         static float camRot = 0.0; // TODO: Should have a way to store attributes on the engine/nodes? Avoid a static here?
         static bool increaseRot = false;
 
@@ -73,10 +73,10 @@ int main(int argc, char* argv[])
         glm::mat4 camRotMat(1.0f);
         camRotMat = glm::rotate(camRotMat, camRot, glm::vec3(0.0, 1.0, 0.0));
         camPos = camRotMat * camPos;
-        eng.camera().lookAt(camPos, glm::vec3(0.0,0.0,0.0), glm::vec3(0.0,1.0,0.0));
+        e.camera().lookAt(camPos, glm::vec3(0.0,0.0,0.0), glm::vec3(0.0,1.0,0.0));
     });
 
-    eng.camera().projectionPerspective(glm::radians(50.f), 800.f / 600.f, 0.01f, 1000.0f);
+    eng.camera().projectionPerspective(glm::radians(50.f), 800.f / 600.f, 0.1f, 1000.0f);
 
     // Start the engine!
     eng.run();

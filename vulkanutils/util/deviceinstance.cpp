@@ -57,7 +57,7 @@ void DeviceInstance::createVulkanInstance(const std::vector<const char*>& requir
       .setApiVersion(apiVer);
 
   auto instanceLayers = enabledLayers;
-#ifdef DEBUG
+#ifdef ENABLE_VK_DEBUG
   // instanceLayers.push_back("VK_LAYER_LUNARG_api_dump");
   instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
   enabledInstanceExtensions.emplace_back("VK_EXT_debug_utils");
@@ -91,8 +91,17 @@ void DeviceInstance::createVulkanInstance(const std::vector<const char*>& requir
     a.getProperties(&propsA);
     vk::PhysicalDeviceProperties propsB;
     b.getProperties(&propsB);
-    // For now just ensure discrete GPUs are first, then order by support vulkan api version
-    if( propsA.deviceType == vk::PhysicalDeviceType::eDiscreteGpu ) return true;
+#ifdef PREFER_DISCRETE_GPU
+    // Above all else pick dedicated over integrated
+    if( propsA.deviceType == vk::PhysicalDeviceType::eDiscreteGpu &&
+        !(propsB.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)) {
+        return true;
+    } else if ( !(propsA.deviceType == vk::PhysicalDeviceType::eDiscreteGpu) &&
+                (propsB.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)) {
+        return false;
+    }
+#endif
+    // Otherwise sort by Vulkan version..There's no clear way to choose here
     if( propsA.apiVersion > propsB.apiVersion ) return true;
     return false;
   });
@@ -234,7 +243,7 @@ vk::UniqueImage DeviceInstance::createImage(
 }
 
 vk::UniqueImageView DeviceInstance::createImageView(
-    const vk::UniqueImage& image,
+    const vk::Image& image,
     vk::ImageViewType type,
     vk::Format format,
     vk::ImageAspectFlags aspectFlags,
@@ -252,7 +261,7 @@ vk::UniqueImageView DeviceInstance::createImageView(
       .setLayerCount(arrayLayerCount);
 
   auto info = vk::ImageViewCreateInfo()
-      .setImage(image.get())
+      .setImage(image)
       .setViewType(type)
       .setFormat(format)
       .setSubresourceRange(subResourceRange);
@@ -287,14 +296,12 @@ uint32_t DeviceInstance::selectDeviceMemoryHeap( vk::MemoryRequirements memoryRe
   // Initial implementation doesn't have any real requirements, just select the first compatible heap
   vk::PhysicalDeviceMemoryProperties memoryProperties = mPhysicalDevices.front().getMemoryProperties();
 
-  for(uint32_t memType = 0u; memType < 32; ++memType) {
-    uint32_t memTypeBit = 1 << memType;
-    if( memoryRequirements.memoryTypeBits & memTypeBit ) {
-      auto deviceMemType = memoryProperties.memoryTypes[memType];
-      if( (deviceMemType.propertyFlags & requiredFlags ) == requiredFlags ) {
-        return memType;
+  auto typeFilter = memoryRequirements.memoryTypeBits;
+
+  for(uint32_t i = 0; i < memoryProperties.memoryTypeCount; ++i) {
+    if ((typeFilter & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & requiredFlags) == requiredFlags) {
+        return i;
       }
-    }
   }
   throw std::runtime_error("Failed to find suitable heap type for flags: " + vk::to_string(requiredFlags));
 }

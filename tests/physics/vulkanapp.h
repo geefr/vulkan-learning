@@ -100,8 +100,6 @@ private:
   int mWindowHeight = 600;
 
   PushConstants mPushConstants;
-  float mPushConstantsScaleFactorDelta = 0.025f;
-  int scaleCount = 0;
 
   struct ComputeSpecConstants {
     uint32_t mComputeBufferWidth = 1000;

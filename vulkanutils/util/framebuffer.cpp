@@ -16,7 +16,7 @@ FrameBuffer::FrameBuffer(vk::Device& device, const WindowIntegration& windowInte
 
 void FrameBuffer::createFrameBuffers( vk::Device& device, const WindowIntegration& windowIntegration, vk::RenderPass& renderPass ) {
   if( !mFrameBuffers.empty() ) throw std::runtime_error("Framenbuffer::createFramebuffers: Already initialised");
-  for( auto i = 0u; i < windowIntegration.swapChainImages().size(); ++i ) {
+  for( auto i = 0u; i < windowIntegration.swapChainSize(); ++i ) {
     // The attachments for the framebuffer
     // Colour attachments are one-per, as they cannot be shared between frames-in-flight
     // The depth attachment can be shared as long as we don't need to read the contents - Only 1 frame will be rendered at once and it's cleared beforehand
@@ -24,7 +24,6 @@ void FrameBuffer::createFrameBuffers( vk::Device& device, const WindowIntegratio
     attachments.emplace_back(windowIntegration.swapChainImageViews()[i].get());
     attachments.emplace_back(windowIntegration.depthImageView());
     auto info = vk::FramebufferCreateInfo()
-        .setFlags({})
         .setRenderPass(renderPass) // Compatible with this render pass (don't use it with any other)
         .setAttachmentCount(attachments.size())
         .setPAttachments(attachments.size() ? attachments.data() : nullptr)
@@ -33,6 +32,8 @@ void FrameBuffer::createFrameBuffers( vk::Device& device, const WindowIntegratio
         .setLayers(1)
         ;
 
-    mFrameBuffers.emplace_back( device.createFramebufferUnique(info));
+    auto fb = device.createFramebufferUnique(info);
+    if( !fb ) throw std::runtime_error("Failed to create framebuffer");
+    mFrameBuffers.emplace_back( std::move(fb) );
   }
 }

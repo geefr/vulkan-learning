@@ -32,7 +32,8 @@ public:
     uint32_t arrayLayers,
     vk::SampleCountFlagBits samples,
     vk::ImageUsageFlags usageFlags,
-    vk::ImageLayout imageLayout
+    vk::MemoryPropertyFlags memFlags = vk::MemoryPropertyFlagBits::eDeviceLocal,
+    vk::ImageAspectFlags aspectFlags = {}
   );
 
   ~SimpleImage();

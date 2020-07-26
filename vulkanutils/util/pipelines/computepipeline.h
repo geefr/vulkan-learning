@@ -19,7 +19,7 @@ class DeviceInstance;
 /**
  * Class to setup/manage a compute pipeline
  */
-class ComputePipeline : public Pipeline
+class ComputePipeline final : public Pipeline
 {
 public:
   ComputePipeline(DeviceInstance& deviceInstance);

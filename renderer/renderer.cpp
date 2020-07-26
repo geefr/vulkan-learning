@@ -18,7 +18,7 @@ void Renderer::initWindow() {
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+
   mWindow = glfwCreateWindow(mWindowWidth, mWindowHeight, "Vulkan Experiment", nullptr, nullptr);
 
   // Initialise event handlers
@@ -26,7 +26,6 @@ void Renderer::initWindow() {
   glfwSetKeyCallback(mWindow, [](GLFWwindow* win, int key, int scancode, int action, int mods) {
     static_cast<Renderer*>(glfwGetWindowUserPointer(win))->onGLFWKeyEvent(key, scancode, action, mods);
     });
-
 }
 
 void Renderer::onGLFWKeyEvent(int key, int scancode, int action, int mods) {
@@ -113,43 +112,42 @@ void Renderer::initVK() {
 
   // Setup our sync primitives
   // imageAvailable - gpu: Used to stall the pipeline until the presentation has finished reading from the image
-  // renderFinished - gpu: Used to stall presentation until the pipeline is finished
-  // frameInFlightFence - cpu: Used to ensure we don't schedule a second frame for each image until the last is complete
-
-  // Create the semaphores we need to manage the frames in flight
-  // and any other data we need to separate on a per-frame basis
-  mMaxFramesInFlight = mWindowIntegration->swapChainImages().size();
+  // renderFinished - gpu: Used to stall presentation until the command buffers have finished
+  // frameInFlightFence - cpu: Used to ensure we don't render a frame twice at once, limit to mMaxFramesInFlight
   for (auto i = 0u; i < mMaxFramesInFlight; ++i) {
-    mImageAvailableSemaphores.emplace_back(mDeviceInstance->device().createSemaphoreUnique({}));
-    mRenderFinishedSemaphores.emplace_back(mDeviceInstance->device().createSemaphoreUnique({}));
-    // Create fence in signalled state so first wait immediately returns and resets fence
-    mInFlightFences.emplace_back(mDeviceInstance->device().createFenceUnique({ vk::FenceCreateFlagBits::eSignaled }));
+    PerFrameData data = {
+      .imageAvailableSem = mDeviceInstance->device().createSemaphoreUnique({}),
+      .renderFinishedSem = mDeviceInstance->device().createSemaphoreUnique({}),
+      .renderFinishedFence = mDeviceInstance->device().createFenceUnique({ vk::FenceCreateFlagBits::eSignaled})
+    };
+    mPerFrameData.emplace_back(std::move(data));
   }
-  mImagesInFlightFences.resize(mMaxFramesInFlight);
 
-  // Create UBOs for per-frame data
-  // and any defaults needed for materials/mesh data
+  // Setup per-image primitives
+  // This data is assigned one for each swapchain image (which may be different to mMaxFramesInFlight
+  mPerImageData.resize(mWindowIntegration->swapChainSize());
+
+  // Create UBOs & descriptors for per-image data and any associated defaults
   createDescriptorSetsForRenderer();
   createDefaultDescriptorSetForMesh();
 
-  // TODO: Misfit
+  // Create our command pool (So we can make command buffers
   mCommandPool = mDeviceInstance->createCommandPool({ vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
     /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
        vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
        */
     }, *mQueue);
-
-  // Now make a command buffer for each framebuffer
+  // Now make a command buffer for each swapchain image
   auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo()
     .setCommandPool(mCommandPool.get())
-    .setCommandBufferCount(static_cast<uint32_t>(mWindowIntegration->swapChainImages().size()))
-    .setLevel(vk::CommandBufferLevel::ePrimary)
-    ;
-
+    .setCommandBufferCount(static_cast<uint32_t>(mPerImageData.size()))
+    .setLevel(vk::CommandBufferLevel::ePrimary);
   mCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
 }
 
-void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer, uint32_t frameIndex) {
+void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer) {
+  const auto& imageData = mPerImageData[mCurrentFrameData.imageIndex];
+
   auto beginInfo = vk::CommandBufferBeginInfo()
     .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse) // Buffer can be resubmitted while already pending execution
     .setPInheritanceInfo(nullptr)
@@ -159,9 +157,9 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   // Start the render pass
   // Clear colour/depth buffers at the start
   std::array<vk::ClearValue, 2> clearVals;
-  std::array<float, 4> clearColour = { 0.f,.0f,0.f,1.f };
+  std::array<float, 4> clearColour = { 0.0f,0.0f,0.0f,1.0f };
   clearVals[0].color = vk::ClearColorValue(clearColour);
-  clearVals[1].depthStencil = vk::ClearDepthStencilValue(1.f, 0);
+  clearVals[1].depthStencil = vk::ClearDepthStencilValue(1.0f, 0);
 
   auto renderPassInfo = vk::RenderPassBeginInfo()
     .setRenderPass(mGraphicsPipeline->renderPass())
@@ -176,20 +174,20 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
   // Bind the graphics pipeline
-  commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->pipeline());
+   commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->pipeline());
 
   // Update the per-frame UBO
   UBOSetPerFrame pfData;
-  pfData.viewMatrix = mViewMatrix;
-  pfData.projectionMatrix = mProjectionMatrix;
-  pfData.eyePos = glm::vec4(mEyePos, 1.0);
-  for( auto lI = 0u; lI < mLightsToRender.size(); ++lI ) {
-      pfData.lights[lI] = mLightsToRender[lI];
+  pfData.viewMatrix = mCurrentFrameData.viewMatrix;
+  pfData.projectionMatrix = mCurrentFrameData.projectionMatrix;
+  pfData.eyePos = glm::vec4(mCurrentFrameData.eyePos, 1.0);
+  for( auto lI = 0u; lI < mCurrentFrameData.lightsToRender.size(); ++lI ) {
+      pfData.lights[lI] = mCurrentFrameData.lightsToRender[lI];
     }
   // std::memcpy(pfData.lights, mLightsToRender.data(), mLightsToRender.size() * sizeof(ShaderLightData));
-  pfData.numLights = mLightsToRender.size();
+  pfData.numLights = mCurrentFrameData.lightsToRender.size();
 
-  auto& pfUBO = mUBOPerFrameInFlight[frameIndex];
+  auto& pfUBO = imageData.ubo;
   std::memcpy(pfUBO->map(), &pfData, sizeof(UBOSetPerFrame));
   pfUBO->flush();
   pfUBO->unmap(); // TODO: Shouldn't actually being unmapping here, the buffer will stick around so this is unecesarry
@@ -198,25 +196,25 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
     mGraphicsPipeline->pipelineLayout(),
     0, 1,
-    &mDescriptorSetsRenderer[frameIndex],
+    &imageData.uboDescriptor,
     0, nullptr);
 
   // Iterate over the meshes we need to render
   // TODO: This is a tad messy here - Should certainly
   // collate the materials into one big UBO, allow
   // meshes to dynamically add/remove from the scene etc.
-  for (auto& mesh : mFrameMeshesToRender) {
+  for (auto& mesh : mCurrentFrameData.meshesToRender) {
     // Bind the descriptor set for the mesh
     // Static mesh data such as Material, textures, etc
     auto meshData = mMeshRenderData.find(mesh.mesh);
     if (meshData != mMeshRenderData.end()) {
       commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-        mGraphicsPipeline->pipelineLayout(),  
+        mGraphicsPipeline->pipelineLayout(),
         1, 1,
         &meshData->second.descriptorSet,
         0, nullptr);
     }
-    else 
+    else
     {
       // Bind the default material
       commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
@@ -301,24 +299,24 @@ void Renderer::createDescriptorSetsForRenderer() {
     .setPSetLayouts(dsLayouts.data());
 
   auto sets = mDeviceInstance->device().allocateDescriptorSets(dsInfo);
-  mDescriptorSetsRenderer = std::vector<vk::DescriptorSet>(
-    std::make_move_iterator(sets.begin()),
-    std::make_move_iterator(sets.end())
-  );
+  for (auto i = 0u; i < mPerImageData.size(); ++i) {
+    mPerImageData[i].uboDescriptor = std::move(sets[i]);
+  }
 
   // Create UBOs
-  for (auto i = 0u; i < mMaxFramesInFlight; ++i) {
-    std::unique_ptr<SimpleBuffer> pfUBO(new SimpleBuffer(
+  for (auto i = 0u; i < mPerImageData.size(); ++i) {
+    std::unique_ptr<SimpleBuffer> ubo(new SimpleBuffer(
       *mDeviceInstance.get(),
       sizeof(UBOSetPerFrame),
       vk::BufferUsageFlagBits::eUniformBuffer));
-    pfUBO->name() = "Per-Frame UBO " + std::to_string(i);
-    mUBOPerFrameInFlight.emplace_back(std::move(pfUBO));
+    ubo->name() = "Global Frame UBO " + std::to_string(i);
+    mPerImageData[i].ubo = std::move(ubo);
   }
 
   // Write descriptors to the sets, to bind them to the UBOs
-  for (auto i = 0u; i < mMaxFramesInFlight; ++i) {
-    auto& ubo = mUBOPerFrameInFlight[i];
+  for (auto i = 0u; i < mPerImageData.size(); ++i) {
+    auto& ubo = mPerImageData[i].ubo;
+    auto& ds  = mPerImageData[i].uboDescriptor;
 
     std::vector<vk::DescriptorBufferInfo> uInfos;
     auto uInfo = vk::DescriptorBufferInfo()
@@ -328,7 +326,7 @@ void Renderer::createDescriptorSetsForRenderer() {
     uInfos.emplace_back(uInfo);
 
     auto wInfo = vk::WriteDescriptorSet()
-      .setDstSet(mDescriptorSetsRenderer[i])
+      .setDstSet(ds)
       .setDstBinding(0)
       .setDstArrayElement(0)
       .setDescriptorCount(static_cast<uint32_t>(uInfos.size()))
@@ -499,13 +497,12 @@ void Renderer::renderMesh(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> 
   i.mesh = mesh;
   i.modelMatrix = modelMat;
 
-  mFrameMeshesToRender.emplace_back(i);
-
+  mCurrentFrameData.meshesToRender.emplace_back(i);
   createDescriptorSetForMesh(mesh, material);
 }
 
 void Renderer::renderLight( const Light& l ) {
-  if( mLightsToRender.size() >= mGraphicsSpecConstants.maxLights ) {
+  if( mCurrentFrameData.lightsToRender.size() >= mGraphicsSpecConstants.maxLights ) {
     // We've hit the limit of the shaders. Probably an insane scene but handle it sensibly
     std::cerr << "WARNING: Renderer::renderLight: Reached the limit of " << mGraphicsSpecConstants.maxLights << " lights. Simplify the scene or increase Renderer::MAX_LIGHTS" << std::endl;
     return;
@@ -530,7 +527,7 @@ void Renderer::renderLight( const Light& l ) {
     std::cos(l.outerConeAngle),
     static_cast<float>(l.type())
   );
-  mLightsToRender.emplace_back(sl);
+  mCurrentFrameData.lightsToRender.emplace_back(sl);
 }
 
 bool Renderer::pollWindowEvents() {
@@ -546,23 +543,23 @@ bool Renderer::pollWindowEvents() {
 
 void Renderer::frameStart() {
   // Reset any per-frame data
-  mFrameMeshesToRender.clear();
-  mLightsToRender.clear();
+  mCurrentFrameData.meshesToRender.clear();
+  mCurrentFrameData.lightsToRender.clear();
 
   // Update the per-frame uniforms
-  mViewMatrix = mEngine.camera().mViewMatrix;
-  mProjectionMatrix = mEngine.camera().mProjectionMatrix;
-  mEyePos = mEngine.camera().mPosition;
+  mCurrentFrameData.viewMatrix = mEngine.camera().mViewMatrix;
+  mCurrentFrameData.projectionMatrix = mEngine.camera().mProjectionMatrix;
+  mCurrentFrameData.eyePos = mEngine.camera().mPosition;
 
   // Engine will now do its thing, we'll get calls to various
   // render methods here, then frameEnd to commit the frame
 
-  // TODO: Placeholder for lighting stuff
+  // TODO: Placeholder for lighting stuff, will be replaced by either a default min-ambient light or entirely rely on LightNodes in the graph
   ShaderLightData l;
   l.colour = glm::vec4(1.f,1.f,1.f, 1.f);
   l.posOrDir = glm::vec4(10.f,10.f,0.f,1.f);
   l.typeAndParams.w = static_cast<float>(Light::Type::Point);
-  mLightsToRender.emplace_back(l);
+  mCurrentFrameData.lightsToRender.emplace_back(l);
 }
 
 void Renderer::frameEnd() {
@@ -570,100 +567,106 @@ void Renderer::frameEnd() {
   // vulkan.hpp throws exceptions by default, in release they might be disabled by CMake
   try
   {
-    static std::once_flag windowShown;
-    std::call_once(windowShown, [&win = mWindow]() {glfwShowWindow(win); });
-
-    // Advance to next frame index, loop at max
-    mFrameIndex++;
-    if (mFrameIndex == mMaxFramesInFlight) mFrameIndex = 0;
+    // TODO: This method is kinda complex/verbose, should simplify if possible
 
     // Wait until any previous runs of this frame have finished
-    auto frameFence = mInFlightFences[mFrameIndex].get();
-    mDeviceInstance->device().waitForFences(1, &frameFence, true, std::numeric_limits<uint64_t>::max());
+    mDeviceInstance->device().waitForFences(1, &mPerFrameData[mCurrentFrameData.frameIndex].renderFinishedFence.get(), true, std::numeric_limits<uint64_t>::max());
+
+    // TODO: We should perform buffer updates and such here
+    // before waiting on the swapchain image's fence/performing blocking calls below
 
     // Acquire an image from the swap chain
     // Important: The image index will probably not match the frame index - If the gpu can empty
     // the swap chain we'll probably just get the 1st/2nd ones, with any others being rarely used.
-    auto imageIndex = mDeviceInstance->device().acquireNextImageKHR(
+    auto img = mDeviceInstance->device().acquireNextImageKHR(
       mWindowIntegration->swapChain(), // Get an image from this
-      std::numeric_limits<uint64_t>::max(), // Don't timeout
-      mImageAvailableSemaphores[mFrameIndex].get(), // semaphore to signal once presentation is finished with the image
-      vk::Fence()).value; // Dummy fence, we don't care here
-
-    std::cerr << "Renderer::frameEnd: Frame " << mFrameIndex << " image " << imageIndex << std::endl;
-
-    // TODO: This can return 'out of date', meaning we need to recreate the swapchain
-    // Currently we'll just terminate when this happens
-
-    // TODO: We should perform buffer updates and such here
-    // before waiting on the swapchain image's fence
-
-    // If there's already a fence for the image wait, something is still
-    // using it
-    if( mImagesInFlightFences[imageIndex] != vk::Fence() ) {
-      mDeviceInstance->device().waitForFences(1, &mImagesInFlightFences[imageIndex], true, std::numeric_limits<uint64_t>::max());
+      std::numeric_limits<uint64_t>::max(), // Don't timeout, block until an image is available (TODO: Should skip the frame and let the engine continue updating?)
+      mPerFrameData[mCurrentFrameData.frameIndex].imageAvailableSem.get(), // semaphore to signal once any existing presentation tasks are done with this image, and that it's available to be presented to
+      vk::Fence()); // Dummy fence, we don't care here
+    if( img.result != vk::Result::eSuccess ) {
+        // TODO: This can return 'out of date', meaning we need to recreate the swapchain
+        // Currently we'll just terminate when this happens
+        throw std::runtime_error("TODO: acquireNextImageKHR failed - This isn't handled by the renderer yet");
     }
-    mImagesInFlightFences[imageIndex] = frameFence;
+    mCurrentFrameData.imageIndex = img.value;
 
-    // Submit the command buffer
-    vk::SubmitInfo submitInfo = {};
-    auto commandBuffer = mCommandBuffers[imageIndex].get();
-    auto frameBuffer = mFrameBuffer->frameBuffers()[imageIndex].get();
+    // If we already have a fence for the image we need to wait - The last frame using this image is active
+    if( mPerImageData[mCurrentFrameData.imageIndex].fence ) {
+      mDeviceInstance->device().waitForFences(1, &mPerImageData[mCurrentFrameData.imageIndex].fence, true, std::numeric_limits<uint64_t>::max());
+    }
+    mPerImageData[mCurrentFrameData.imageIndex].fence = mPerFrameData[mCurrentFrameData.frameIndex].renderFinishedFence.get();
 
     // Rebuild the command buffer every frame
     // This isn't the most efficient but we're at least re-using the command buffer
     // In a most complex application we would have multiple command buffers and only rebuild
     // the section that needs changing..I think
-    buildCommandBuffer(commandBuffer, frameBuffer, mFrameIndex);
+    auto& commandBuffer = mCommandBuffers[mCurrentFrameData.imageIndex].get();
+    buildCommandBuffer(
+      commandBuffer,
+      mFrameBuffer->frameBuffers()[mCurrentFrameData.imageIndex].get());
 
-    // Don't execute until this is ready
-    vk::Semaphore waitSemaphores[] = { mImageAvailableSemaphores[mFrameIndex].get() };
-    // place the wait before writing to the colour attachment
-
-    // If we have render pass depedencies
+    // Setup synchronisation for the command buffer submission
+    // - Wait until the presentation image is available before execution
+    // - (dstStageMask) Perform the corresponding semaphore wait at this stage
+    //   - In this case only wait once we reach colorAttachmantOutput, all other work can be done before hand
+    // - Signal a semaphore when execution is done (Used later when presenting)
+    vk::Semaphore waitSemaphores[]{ mPerFrameData[mCurrentFrameData.frameIndex].imageAvailableSem.get() };
     vk::PipelineStageFlags waitStages[]{ vk::PipelineStageFlagBits::eColorAttachmentOutput };
-
-    // Signal this semaphore when rendering is done
-    vk::Semaphore signalSemaphores[] = { mRenderFinishedSemaphores[mFrameIndex].get() };
-    submitInfo.setWaitSemaphoreCount(1)
+    auto& renderFinishedSemaphore = mPerFrameData[mCurrentFrameData.frameIndex].renderFinishedSem.get();
+    auto submitInfo = vk::SubmitInfo()
+      .setWaitSemaphoreCount(1)
       .setPWaitSemaphores(waitSemaphores)
       .setPWaitDstStageMask(waitStages)
       .setCommandBufferCount(1)
       .setPCommandBuffers(&commandBuffer)
       .setSignalSemaphoreCount(1)
-      .setPSignalSemaphores(signalSemaphores)
+      .setPSignalSemaphores(&renderFinishedSemaphore)
       ;
 
-    // Reset the fence before it gets used
-    mDeviceInstance->device().resetFences(1, &frameFence);
-
-    vk::ArrayProxy<vk::SubmitInfo> submits(submitInfo);
-    // submit, signal the frame fence at the end
-    mQueue->queue.submit(submits.size(), submits.data(), frameFence);
-
     // Present the results of a frame to the swap chain
+    // - Presentation will wait until renderFinishedSemaphores have been signalled
     vk::SwapchainKHR swapChains[] = { mWindowIntegration->swapChain() };
-    vk::PresentInfoKHR presentInfo = {};
-    presentInfo.setWaitSemaphoreCount(1)
-      .setPWaitSemaphores(signalSemaphores) // Wait before presentation can start
+    auto presentInfo = vk::PresentInfoKHR()
+      .setWaitSemaphoreCount(1)
+      .setPWaitSemaphores(&renderFinishedSemaphore)
       .setSwapchainCount(1)
       .setPSwapchains(swapChains)
-      .setPImageIndices(&imageIndex)
+      .setPImageIndices(&mCurrentFrameData.imageIndex)
       .setPResults(nullptr)
       ;
 
+    // Reset the frame fence
+    // This fence will be signalled when the queue submissions are finished
+    if( mDeviceInstance->device().resetFences(1, &mPerFrameData[mCurrentFrameData.frameIndex].renderFinishedFence.get()) != vk::Result::eSuccess ) {
+            throw std::runtime_error("Renderer: Failed to reset frame fence");
+    }
+
+    // submit, signal the frame fence at the end
+    auto submitResult = mQueue->queue.submit(1, &submitInfo, mPerFrameData[mCurrentFrameData.frameIndex].renderFinishedFence.get());
+    if( submitResult != vk::Result::eSuccess ) {
+        throw std::runtime_error("Renderer: Queue submission failed");
+      }
+
     // TODO: Currently using a single queue for both graphics and present
     // Some systems may not be able to support this
-    mQueue->queue.presentKHR(presentInfo);
+    auto presentResult = mQueue->queue.presentKHR(presentInfo);
+    if( presentResult!= vk::Result::eSuccess ) {
+        // TODO: present can return failures for out of date/suboptimal, need to
+        // recreate the swap chain in that case
+        throw std::runtime_error("TODO: queue present failed - This isn't handled by the renderer yet");
+    }
 
-    // TODO: present can return failures for out of date/suboptimal, need to
-    // recreate the swap chain in that case
+    // Advance to next frame index, loop at max
+    mCurrentFrameData.frameIndex++;
+    if (mCurrentFrameData.frameIndex == mMaxFramesInFlight) mCurrentFrameData.frameIndex = 0;
   }
   catch (vk::Error& e) {
     std::cerr << "Renderer::frameEnd: vk::Error: " << e.what() << std::endl;
+    throw;
   }
   catch (...) {
     std::cerr << "Renderer::frameEnd: Unknown Exception:" << std::endl;
+    throw;
   }
 }
 
@@ -685,12 +688,8 @@ void Renderer::cleanup() {
 
   mUBOMeshDataDefault.reset();
   mMeshRenderData.clear();
-  mUBOPerFrameInFlight.clear();
-  
-  mImagesInFlightFences.clear();
-  mInFlightFences.clear();
-  mRenderFinishedSemaphores.clear();
-  mImageAvailableSemaphores.clear();
+  mPerImageData.clear();
+  mPerFrameData.clear();
 
   mCommandBuffers.clear();
   mCommandPool.reset();

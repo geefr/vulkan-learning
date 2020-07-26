@@ -11,13 +11,13 @@
 #include <iostream>
 #include <fstream>
 
-#ifdef DEBUG
+#ifdef ENABLE_VK_DEBUG
   vk::DispatchLoaderDynamic Util::mDidl;
   vk::UniqueHandle<vk::DebugUtilsMessengerEXT, vk::DispatchLoaderDynamic> Util::mDebugUtilsMessenger;
   bool Util::mDebugCallbackValid;
 #endif
 void Util::reset() {
-#ifdef DEBUG
+#ifdef ENABLE_VK_DEBUG
   mDebugUtilsMessenger.reset();
   mDebugCallbackValid = false;
 #endif
@@ -33,7 +33,7 @@ std::string Util::physicalDeviceTypeToString( vk::PhysicalDeviceType type ) {
   case vk::PhysicalDeviceType::eVirtualGpu: return "Virtual GPU";
   }
   return "Unknown";
-};
+}
 
 std::string Util::vulkanAPIVersionToString( uint32_t version ) {
   auto major = VK_VERSION_MAJOR(version);
@@ -95,7 +95,7 @@ void Util::printQueueFamilyProperties( std::vector<vk::QueueFamilyProperties>& p
   }
 }
 
-#ifdef DEBUG
+#ifdef ENABLE_VK_DEBUG
 VKAPI_ATTR VkBool32 VKAPI_CALL Util::debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -135,7 +135,7 @@ uint32_t Util::findQueue(DeviceInstance& device, vk::QueueFlags requiredFlags) {
 }
 
 
-#ifdef DEBUG
+#ifdef ENABLE_VK_DEBUG
 void Util::initDidl( vk::Instance& instance ) {
   mDidl.init(instance, ::vkGetInstanceProcAddr);
 }

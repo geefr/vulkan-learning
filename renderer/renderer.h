@@ -134,7 +134,9 @@ public:
   void onGLFWKeyEvent(int key, int scancode, int action, int mods);
 
 private:
-  void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer, uint32_t frameIndex);
+  // Build command buffer(s) for the current frame
+  // Will read from mPerFrameData and mPerImageData
+  void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer);
   
   /// Initialise Descriptor pool, layouts for the renderer - Per-frame constants
   void initDescriptorSetsForRenderer();
@@ -149,6 +151,7 @@ private:
   Engine& mEngine;
 
   // The window itself
+  // TODO: Currently hardcoded, should not be
   GLFWwindow* mWindow = nullptr;
   int mWindowWidth = 800;
   int mWindowHeight = 600;
@@ -164,7 +167,6 @@ private:
 
   // Descriptor pool for the renderer's per-frame data
   vk::UniqueDescriptorPool mDescriptorPoolRenderer;
-  std::vector<vk::DescriptorSet> mDescriptorSetsRenderer; // Owned by pool
 
   // Descriptor pool for per-mesh data (materials)
   vk::UniqueDescriptorPool mDescriptorPoolMeshes;
@@ -172,50 +174,65 @@ private:
   vk::UniqueCommandPool mCommandPool;
   std::vector<vk::UniqueCommandBuffer> mCommandBuffers;
 
-  // Members managing data on a per-frame basis
+  // Data for each of the frames-in-flight
   // Vectors used here to maintain independent copies of the data
   // as we can't modify it when it's already in use for rendering
   // a frame
-  uint32_t mMaxFramesInFlight = 3u;
-  uint32_t mFrameIndex = 0u;
-  std::vector<vk::UniqueSemaphore> mImageAvailableSemaphores;
-  std::vector<vk::UniqueSemaphore> mRenderFinishedSemaphores;
-  // A fence for each of the in-flight frames
-  std::vector<vk::UniqueFence> mInFlightFences;
-  // Tracking of fences against swapchain images
-  // The fence for an image in the chain will be set to one of the
-  // in flight fences when frame is submitted.
-  std::vector<vk::Fence> mImagesInFlightFences;
-  std::vector<std::unique_ptr<SimpleBuffer>> mUBOPerFrameInFlight;
+  struct PerFrameData {
+    vk::UniqueSemaphore imageAvailableSem;
+    vk::UniqueSemaphore renderFinishedSem;
+    vk::UniqueFence     renderFinishedFence;
+  };
+
+  // Data for each of the swapchains images
+  struct PerImageData {
+    std::unique_ptr<SimpleBuffer> ubo; // Matrices, global frame data
+    vk::DescriptorSet uboDescriptor = {}; // Owned by pool
+    vk::Fence fence = {}; // A fence, assigned from mFramesInFlight
+  };
+
+  uint32_t mMaxFramesInFlight = 2u;
+
+  std::vector<PerFrameData> mPerFrameData;
+  std::vector<PerImageData> mPerImageData;
 
   // Push constants can be updated at any point however
   vk::PushConstantRange mPushConstantSetRange;
 
   // Members used to track data during the nodegraph traversal
   // render will happen once this is populated
-  glm::mat4x4 mViewMatrix = glm::mat4x4(1.0f);
-  glm::mat4x4 mProjectionMatrix = glm::mat4x4(1.0f);
-  glm::vec3 mEyePos = {0.f,0.f,0.f};
-
   // An instruction to the renderer to draw the mesh
   struct MeshRenderInstance {
     std::shared_ptr<Mesh> mesh;
     glm::mat4x4 modelMatrix;
   };
-  std::list<MeshRenderInstance> mFrameMeshesToRender;
 
-  // Shader resources for each rendered mesh
+  struct CurrentFrameData {
+    // Global frame data
+    glm::mat4x4 viewMatrix = glm::mat4x4(1.0f);
+    glm::mat4x4 projectionMatrix = glm::mat4x4(1.0f);
+    glm::vec3 eyePos = {0.f,0.f,0.f};
+
+    // The meshes and lights to render in the frame
+    std::list<MeshRenderInstance> meshesToRender;
+    std::vector<ShaderLightData> lightsToRender;
+
+    // Tracking of which frame we're on, and which image the frame is rendering to
+    uint32_t frameIndex = 0u;
+    uint32_t imageIndex = 0u;
+  } mCurrentFrameData;
+
+  // Shader/Material resources for each rendered mesh
+  // TODO: Will be shared between frames, assumed to never be cleared
   struct MeshRenderData {
     vk::DescriptorSet descriptorSet;
     std::unique_ptr<SimpleBuffer> uboMaterial;
   };
   std::map<std::shared_ptr<Mesh>, MeshRenderData> mMeshRenderData;
 
+  // Default/placeholder material
   std::unique_ptr<SimpleBuffer> mUBOMeshDataDefault;
   vk::DescriptorSet mDescriptorSetMeshDataDefault;
-
-  // The lights to render in the frame
-  std::vector<ShaderLightData> mLightsToRender;
 };
 
 #endif
