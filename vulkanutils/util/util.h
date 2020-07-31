@@ -44,7 +44,7 @@ public:
 
   static std::vector<char> readFile(const std::string& fileName);
 
-#ifdef DEBUG
+#ifdef ENABLE_VK_DEBUG
   static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
       VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
       VkDebugUtilsMessageTypeFlagsEXT messageType,

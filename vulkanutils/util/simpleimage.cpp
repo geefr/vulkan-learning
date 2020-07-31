@@ -18,7 +18,8 @@ SimpleImage::SimpleImage(DeviceInstance& deviceInstance,
     uint32_t arrayLayers,
     vk::SampleCountFlagBits samples,
     vk::ImageUsageFlags usageFlags,
-    vk::ImageLayout imageLayout)
+    vk::MemoryPropertyFlags memFlags,
+    vk::ImageAspectFlags aspectFlags)
   : mDeviceInstance(deviceInstance)
 {
   if( mipLevels == 0 ) throw std::runtime_error("SimpleImage: mipLevels must be >= 1");
@@ -39,16 +40,18 @@ SimpleImage::SimpleImage(DeviceInstance& deviceInstance,
   );
 
   // Setup the image's memory
-  auto mDeviceMemory = mDeviceInstance.allocateDeviceMemoryForImage(mImage, {});
+  mDeviceMemory = mDeviceInstance.allocateDeviceMemoryForImage(mImage, memFlags);
+  if( !mDeviceMemory ) throw std::runtime_error("SimpleImage: Failed to allocate memory");
   mDeviceInstance.bindMemoryToImage(mImage, mDeviceMemory, 0);
 
   // TODO: For now just making one view, same format as the image itself
   mImageView = mDeviceInstance.createImageView(
-        mImage,
+        mImage.get(),
         imageViewType,
         imageFormat,
-        vk::ImageAspectFlagBits::eDepth
+        aspectFlags
         );
+  if( !mImageView ) throw std::runtime_error("SimpleImage: Failed to create image view");
   // TODO: Image layout/transitions needed for texture upload
 }
 

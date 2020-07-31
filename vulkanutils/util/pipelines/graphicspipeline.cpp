@@ -56,7 +56,6 @@ void GraphicsPipeline::createRenderPass() {
       .setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
   auto subpass = vk::SubpassDescription()
-      .setFlags({})
       .setPipelineBindPoint(vk::PipelineBindPoint::eGraphics) // Marked as a graphics subpass, looks like we can mix multiple subpass types in one render pass?
       .setColorAttachmentCount(1)
       .setPColorAttachments(&colourAttachmentRef)
@@ -68,7 +67,7 @@ void GraphicsPipeline::createRenderPass() {
   /*
    * Setup subpass dependencies
    * This is needed to ensure that the render pass
-   * doesn't begin until tthe image is available
+   * doesn't begin until the image is available
    *
    * Apparently an alternative is to set the waitStages of the command buffer
    * to top of pipe to ensure rendering doesn't begin until the pipeline is started?
@@ -81,10 +80,9 @@ void GraphicsPipeline::createRenderPass() {
       .setSrcSubpass(VK_SUBPASS_EXTERNAL) // implicit subpass before this pass
       .setDstSubpass(0) // The index of our subpass
       .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput) // Wait on this operation
-      .setSrcAccessMask(vk::AccessFlags()) // Which needs to happen in this stage...here we're waiting for the swap chain to finish reading from the image
+      .setSrcAccessMask({}) // Which needs to happen in this stage...here we're waiting for the swap chain to finish reading from the image
       .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput) // The operations which should wait are in the colour attachment stage
-      .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite) // and involve the reading and writing of the colour attachment
-                                                            // These prevent the transition from happening until it's necessary/allowed, when we want to start writing colours to it..
+      .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite) // and involve the writing of the colour attachment
       ;
 
   // Now let's actually make the render pass
@@ -92,7 +90,6 @@ void GraphicsPipeline::createRenderPass() {
   attachments.emplace_back(colourAttachment);
   attachments.emplace_back(depthAttachment);
   auto renderPassInfo = vk::RenderPassCreateInfo()
-      .setFlags({})
       .setAttachmentCount(attachments.size())
       .setPAttachments(attachments.size() ? attachments.data() : nullptr)
       .setSubpassCount(1)
@@ -102,6 +99,7 @@ void GraphicsPipeline::createRenderPass() {
       ;
 
   mRenderPass = mDeviceInstance.device().createRenderPassUnique(renderPassInfo);
+  if( !mRenderPass ) throw std::runtime_error("Failed to create render pass");
 }
 
 void GraphicsPipeline::createPipeline() {
@@ -154,7 +152,6 @@ void GraphicsPipeline::createPipeline() {
 
   // Rasteriser
   auto rasterisationInfo = vk::PipelineRasterizationStateCreateInfo()
-      .setFlags({})
       .setDepthClampEnable(false)
       .setRasterizerDiscardEnable(false)
       .setPolygonMode(vk::PolygonMode::eFill)
@@ -186,7 +183,7 @@ void GraphicsPipeline::createPipeline() {
   // create info is global to the pipeline
   auto colourBlendAttach = vk::PipelineColorBlendAttachmentState()
       .setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
-      .setBlendEnable(true)
+      .setBlendEnable(false)
       .setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha)
       .setDstColorBlendFactor(vk::BlendFactor::eOneMinusDstAlpha)
       .setColorBlendOp(vk::BlendOp::eAdd)
@@ -196,7 +193,6 @@ void GraphicsPipeline::createPipeline() {
       ;
 
   auto colourBlendInfo = vk::PipelineColorBlendStateCreateInfo()
-      .setFlags({})
       .setLogicOpEnable(false)
       .setLogicOp(vk::LogicOp::eCopy)
       .setAttachmentCount(1)
@@ -219,17 +215,16 @@ void GraphicsPipeline::createPipeline() {
   for (auto& p : mDescriptorSetLayouts) tmpLayouts.emplace_back(p.get());
 
   auto layoutInfo = vk::PipelineLayoutCreateInfo()
-      .setFlags({})
       .setSetLayoutCount(numDSLayouts)
       .setPSetLayouts(numDSLayouts ? tmpLayouts.data() : nullptr)
       .setPushConstantRangeCount(numPushConstantRanges)
       .setPPushConstantRanges(numPushConstantRanges ? mPushConstants.data() : nullptr)
       ;
   mPipelineLayout = mDeviceInstance.device().createPipelineLayoutUnique(layoutInfo);
+  if( !mPipelineLayout ) throw std::runtime_error("Failed to create pipeline layout");
 
   // Finally let's make the pipeline itself
   auto pipelineInfo = vk::GraphicsPipelineCreateInfo()
-      .setFlags({})
       .setStageCount(static_cast<uint32_t>(shaderStages.size()))
       .setPStages(shaderStages.data())
       .setPVertexInputState(&vertInputInfo)
@@ -249,7 +244,7 @@ void GraphicsPipeline::createPipeline() {
 
 
   mPipeline = mDeviceInstance.device().createGraphicsPipelineUnique({}, pipelineInfo);
-
+  if( !mPipeline ) throw std::runtime_error("Failed to create pipeline");
   // Shader modules deleted here, only needed for pipeline init
 }
 

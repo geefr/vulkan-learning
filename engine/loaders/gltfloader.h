@@ -18,7 +18,7 @@ class Node;
 namespace tinygltf {
   class Node;
   class Model;
-  class Primitive;
+  struct Primitive;
 }
 
 /// TODO: For now just a nasty static utility method,

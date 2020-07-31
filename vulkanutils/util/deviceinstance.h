@@ -74,7 +74,7 @@ public:
       vk::ImageUsageFlags usageFlags, vk::SharingMode sharingMode, std::vector<uint32_t> queueFamilies,
       vk::ImageLayout layout );
   vk::UniqueImageView createImageView(
-      const vk::UniqueImage& image,
+      const vk::Image& image,
       vk::ImageViewType type,
       vk::Format format,
       vk::ImageAspectFlags aspectFlags,
@@ -106,7 +106,6 @@ public:
 private:
   void createVulkanInstance(const std::vector<const char*>& requiredExtensions, std::string appName, uint32_t appVer, uint32_t apiVer, const std::vector<const char*>& enabledLayers);
   void createLogicalDevice(std::vector<vk::QueueFlags> qFlags);
-
 
   std::vector<vk::PhysicalDevice> mPhysicalDevices;
 

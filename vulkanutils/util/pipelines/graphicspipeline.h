@@ -19,7 +19,7 @@ class WindowIntegration;
  * Class to manage stuff around the vulkan graphics pipeline
  * TODO: This isn't flexible, at first holding the pipeline and render passes together, which might not be that sensible?
  */
-class GraphicsPipeline : public Pipeline
+class GraphicsPipeline final : public Pipeline
 {
 public:
   GraphicsPipeline(WindowIntegration& windowIntegration, DeviceInstance& deviceInstance, bool invertY = false);
