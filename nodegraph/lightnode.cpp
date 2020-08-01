@@ -16,7 +16,7 @@ LightNode::LightNode(const Light& l)
 
 void LightNode::doRender(Renderer& rend, mat4x4 nodeMat, mat4x4, mat4x4)
 {
-  glm::vec4 pos(0.0f);
+  glm::vec4 pos(0.0f,0.0f,0.0f,1.0f);
   pos = nodeMat * pos; // To world space
   mLight.position = pos;
   mLight.direction = pos;

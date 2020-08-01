@@ -90,7 +90,7 @@ function(compile_shader _target _shaderTarget _shaderFile _additionalSrc)
 endfunction()
 
 # Debug flags and other hacks
-add_compile_definitions(ENABLE_VK_DEBUG)
+# add_compile_definitions(ENABLE_VK_DEBUG)
 
 # Set to always select discrete gpu over integrated
 add_compile_definitions(PREFER_DISCRETE_GPU)

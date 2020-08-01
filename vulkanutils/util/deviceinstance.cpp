@@ -76,7 +76,7 @@ void DeviceInstance::createVulkanInstance(const std::vector<const char*>& requir
 
   mInstance = vk::createInstanceUnique(instanceCreateInfo);
 
-#ifdef DEBUG
+#ifdef ENABLE_VK_DEBUG
   // Now we have an instance we can register the debug callback
   Util::initDidl(mInstance.get());
   Util::initDebugMessenger(mInstance.get());

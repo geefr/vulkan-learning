@@ -32,7 +32,7 @@ void main() {
     vec3 lightDir = normalize(l.posOrDir.xyz - inPosWorld);
 
     // ambient hardcoded
-    vec4 ambient = vec4(vec3(0.1,0.1,0.1) * uboMaterial.baseColourFactor.xyz, 1.0);
+    vec4 ambient = vec4(vec3(0.01,0.01,0.01) * uboMaterial.baseColourFactor.xyz, 1.0);
 
     // Diffuse from light + base colour
     //vec4 diffuse = l.colour + uboMaterial.baseColourFactor;
@@ -42,7 +42,7 @@ void main() {
     vec3 specReflectDir = reflect(-lightDir,normal);
     vec4 specular = vec4(l.colour.xyz * pow(max(dot(eyeDir, specReflectDir), 0.0), 4.0) * uboMaterial.specularFactor, 1.0);
 
-    outColour += (ambient + diffuse /*+ specular*/) / float(uboPerFrame.numLights);
+    outColour += ((ambient + diffuse + specular) / float(uboPerFrame.numLights));
   }
   outColour.a = 1.0;
 }

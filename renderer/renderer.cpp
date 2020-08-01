@@ -546,6 +546,7 @@ void Renderer::renderLight( const Light& l ) {
   }
   ShaderLightData sl;
   sl.colour = glm::vec4(l.colour, l.intensity);
+
   switch(l.type()) {
     case Light::Type::Directional:
       sl.posOrDir = glm::vec4(l.direction, 0.f);
