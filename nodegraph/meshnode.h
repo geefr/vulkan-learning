@@ -14,9 +14,7 @@
 #include "vertex.h"
 #include "material.h"
 
- /**
-  * A node which renders a mesh
-  */
+/// A node which renders a mesh
 class MeshNode : public Node
 {
 public:

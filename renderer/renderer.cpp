@@ -592,11 +592,11 @@ void Renderer::frameStart() {
   // render methods here, then frameEnd to commit the frame
 
   // TODO: Placeholder for lighting stuff, will be replaced by either a default min-ambient light or entirely rely on LightNodes in the graph
-  ShaderLightData l;
-  l.colour = glm::vec4(1.f,1.f,1.f, 1.f);
-  l.posOrDir = glm::vec4(10.f,10.f,0.f,1.f);
-  l.typeAndParams.w = static_cast<float>(Light::Type::Point);
-  mCurrentFrameData.lightsToRender.emplace_back(l);
+//  ShaderLightData l;
+//  l.colour = glm::vec4(1.f,1.f,1.f, 1.f);
+//  l.posOrDir = glm::vec4(10.f,10.f,0.f,1.f);
+//  l.typeAndParams.w = static_cast<float>(Light::Type::Point);
+//  mCurrentFrameData.lightsToRender.emplace_back(l);
 }
 
 void Renderer::frameEnd() {

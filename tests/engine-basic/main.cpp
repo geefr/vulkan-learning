@@ -39,7 +39,7 @@ int main(int argc, char* argv[])
         eng.nodegraph()->children().emplace_back(dummyMesh);
     }
 
-    static bool camActive = true;
+    static bool camActive = false;
     static float camDistance = 5.0f;
 
     // Event Handling

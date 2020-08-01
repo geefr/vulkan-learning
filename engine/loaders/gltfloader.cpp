@@ -7,7 +7,7 @@
 
 #include "gltfloader.h"
 #include "meshnode.h"
-
+#include "lightnode.h"
 
 #define TINYGLTF_NO_STB_IMAGE_WRITE
 #define TINYGLTF_IMPLEMENTATION
@@ -147,6 +147,25 @@ void GLTFLoader::parseGltfNode(std::shared_ptr<Node> targetParent, tinygltf::Nod
       }
 
       n->children().emplace_back(mesh);
+    }
+  }
+
+  auto lightExt = gNode.extensions.find("KHR_lights_punctual");
+  if( lightExt != gNode.extensions.end() ) {
+    auto gLightVal = lightExt->second;
+    if( gLightVal.Has("light")) {
+       auto lightI = gLightVal.Get("light").GetNumberAsInt();
+       auto& gLight = gModel.lights[lightI];
+       Light l(gLight.type);
+       l.name = gLight.name;
+       l.range = gLight.range;
+       l.colour = glm::vec3(gLight.color[0], gLight.color[1], gLight.color[2]);
+       // l.position - Taken care of by node position
+       // l.direction - Taken care of by node position
+       l.intensity = gLight.intensity;
+       l.innerConeAngle = gLight.spot.innerConeAngle;
+       l.outerConeAngle = gLight.spot.outerConeAngle;
+       n->children().emplace_back(new LightNode(l));
     }
   }
 
