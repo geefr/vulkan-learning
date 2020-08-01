@@ -488,7 +488,8 @@ void Renderer::createDescriptorSetForMesh(std::shared_ptr<Mesh> mesh, std::share
 }
 
 void Renderer::renderMesh(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material, glm::mat4x4 modelMat) {
-  if (!mesh) return;
+  if( !mesh ) return;
+  if( !mesh->validForRender() ) return;
   if( !material ) material.reset(new Material());
 
   // Note that we need to render the mesh, frameEnd will

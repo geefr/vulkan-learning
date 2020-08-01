@@ -27,6 +27,9 @@ struct Mesh {
     /// Delete buffers
     void cleanup(Renderer& rend);
 
+    /// @return true if the mesh is setup for rendering
+    bool validForRender() const;
+
     // (Will be cleared once uploaded)
     std::vector<Vertex> mVertices;
     std::vector<uint32_t> mIndices;
