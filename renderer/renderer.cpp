@@ -158,6 +158,14 @@ void Renderer::createSwapChainAndGraphicsPipeline() {
 }
 
 void Renderer::reCreateSwapChainAndGraphicsPipeline() {
+  // Handle minimisation (size == 0)
+  // Also just refresh the size, just incase it's out of date
+  glfwGetFramebufferSize(mWindow, &mWindowWidth, &mWindowHeight);
+  while( mWindowWidth == 0 || mWindowHeight == 0 ) {
+    glfwGetFramebufferSize(mWindow, &mWindowWidth, &mWindowHeight);
+    glfwWaitEvents();
+  }
+
   // Perform a partial teardown and recreate (to hand window resize/similar)
   // This method should clean up anything that's created in createSwapChainAndGraphicsPipeline
   // TODO: It's possible/more efficient to create a new swapchain while we're still rendering
