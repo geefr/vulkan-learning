@@ -44,8 +44,13 @@ public:
   /**
    * The camera/viewport of the scene
    * TODO: For now this is a single camera managed by the engine. VR support will require something much more complicated, and multiple cameras in the scene would be handy.
+   * The application is responsible for managing the camera's position/perspective
    */
   Camera& camera();
+
+  /// The dimensions of the window (pixels)
+  float windowWidth() const;
+  float windowHeight() const;
 
   void addEvent(std::shared_ptr<Event> e);
   void addEvent(Event* e);

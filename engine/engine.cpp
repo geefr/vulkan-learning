@@ -87,6 +87,8 @@ void Engine::cleanup() {
 }
 
 Camera& Engine::camera() { return mCamera; }
+float Engine::windowWidth() const { return static_cast<float>(mRend->windowWidth()); }
+float Engine::windowHeight() const { return static_cast<float>(mRend->windowHeight()); }
 
 void Engine::addEvent(std::shared_ptr<Event> e) { mEventQueue.emplace_back(e); }
 void Engine::addEvent(Event* e) { mEventQueue.emplace_back(e); }

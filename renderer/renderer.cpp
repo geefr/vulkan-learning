@@ -17,7 +17,6 @@ void Renderer::initWindow() {
   // TODO: This should be in a separate class - Renderer shouldn't be tied to one window system
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
   mWindow = glfwCreateWindow(mWindowWidth, mWindowHeight, "Vulkan Experiment", nullptr, nullptr);
 
@@ -25,8 +24,14 @@ void Renderer::initWindow() {
   glfwSetWindowUserPointer(mWindow, this);
   glfwSetKeyCallback(mWindow, [](GLFWwindow* win, int key, int scancode, int action, int mods) {
     static_cast<Renderer*>(glfwGetWindowUserPointer(win))->onGLFWKeyEvent(key, scancode, action, mods);
-    });
+  });
+  glfwSetFramebufferSizeCallback(mWindow, [](GLFWwindow* win, int width, int height) {
+    static_cast<Renderer*>(glfwGetWindowUserPointer(win))->onGLFWFramebufferSize(width, height);
+  });
 }
+
+int Renderer::windowWidth() const { return mWindowWidth; }
+int Renderer::windowHeight() const { return mWindowHeight; }
 
 void Renderer::onGLFWKeyEvent(int key, int scancode, int action, int mods) {
   if (action == GLFW_PRESS) {
@@ -35,6 +40,12 @@ void Renderer::onGLFWKeyEvent(int key, int scancode, int action, int mods) {
   else if (action == GLFW_RELEASE) {
     mEngine.addEvent(new KeyReleaseEvent(key));
   }
+}
+
+void Renderer::onGLFWFramebufferSize(int width, int height) {
+  mRecreateSwapChainSoon = true;
+  mWindowWidth = width;
+  mWindowHeight = height;
 }
 
 void Renderer::initVK() {
@@ -55,11 +66,37 @@ void Renderer::initVK() {
   //auto queueFamilyProps = dev.getQueueFamilyProperties();
   //printQueueFamilyProperties(queueFamilyProps);
 
+  createSwapChainAndGraphicsPipeline();
+
+  // Setup per-image primitives
+  // This data is assigned one for each swapchain image (which may be different to mMaxFramesInFlight)
+  mPerImageData.resize(mWindowIntegration->swapChainSize());
+  // Create descriptor pools
+  initDescriptorSetsForRenderer();
+  initDescriptorSetsForMeshes();
+  // Create UBOs & descriptors for per-image data and any associated defaults
+  createDescriptorSetsForRenderer();
+  createDefaultDescriptorSetForMesh();
+
+  // Setup our sync primitives
+  // imageAvailable - gpu: Used to stall the pipeline until the presentation has finished reading from the image
+  // renderFinished - gpu: Used to stall presentation until the command buffers have finished
+  // frameInFlightFence - cpu: Used to ensure we don't render a frame twice at once, limit to mMaxFramesInFlight
+  for (auto i = 0u; i < mMaxFramesInFlight; ++i) {
+    PerFrameData data = {
+      .imageAvailableSem = mDeviceInstance->device().createSemaphoreUnique({}),
+      .renderFinishedSem = mDeviceInstance->device().createSemaphoreUnique({}),
+      .renderFinishedFence = mDeviceInstance->device().createFenceUnique({ vk::FenceCreateFlagBits::eSignaled})
+    };
+    mPerFrameData.emplace_back(std::move(data));
+  }
+}
+
+void Renderer::createSwapChainAndGraphicsPipeline() {
   // Create a logical device to interact with
   // To do this we also need to specify how many queues from which families we want to create
   // In this case just 1 queue from the first family which supports graphics
   mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mQueue));
-  mMaxFramesInFlight = mWindowIntegration->swapChainImages().size();
 
   // Create the pipeline, with a flag to invert the viewport height (Switch to left handed coordinate system)
   // If changing this check the compile flags for GLM_FORCE_LEFT_HANDED - The rest of the engine uses one cs
@@ -86,11 +123,10 @@ void Renderer::initVK() {
     mGraphicsPipeline->vertexInputAttributes().emplace_back(2, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, uv0));
     mGraphicsPipeline->vertexInputAttributes().emplace_back(3, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, uv0));
 
-    // Setup descriptor layouts on pipeline
-    // Create descriptor pools
-    initDescriptorSetsForRenderer();
-    initDescriptorSetsForMeshes();
-    
+    // Register the Descriptor set layouts on the pipeline
+    mGraphicsPipeline->addDescriptorSetLayoutBinding(0, 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics);
+    mGraphicsPipeline->addDescriptorSetLayoutBinding(1, 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics);
+
     // Register the push constant blocks
     mPushConstantSetRange = vk::PushConstantRange()
       .setStageFlags(vk::ShaderStageFlagBits::eVertex)
@@ -110,39 +146,35 @@ void Renderer::initVK() {
 
   mFrameBuffer.reset(new FrameBuffer(mDeviceInstance->device(), *mWindowIntegration.get(), mGraphicsPipeline->renderPass()));
 
-  // Setup our sync primitives
-  // imageAvailable - gpu: Used to stall the pipeline until the presentation has finished reading from the image
-  // renderFinished - gpu: Used to stall presentation until the command buffers have finished
-  // frameInFlightFence - cpu: Used to ensure we don't render a frame twice at once, limit to mMaxFramesInFlight
-  for (auto i = 0u; i < mMaxFramesInFlight; ++i) {
-    PerFrameData data = {
-      .imageAvailableSem = mDeviceInstance->device().createSemaphoreUnique({}),
-      .renderFinishedSem = mDeviceInstance->device().createSemaphoreUnique({}),
-      .renderFinishedFence = mDeviceInstance->device().createFenceUnique({ vk::FenceCreateFlagBits::eSignaled})
-    };
-    mPerFrameData.emplace_back(std::move(data));
-  }
-
-  // Setup per-image primitives
-  // This data is assigned one for each swapchain image (which may be different to mMaxFramesInFlight
-  mPerImageData.resize(mWindowIntegration->swapChainSize());
-
-  // Create UBOs & descriptors for per-image data and any associated defaults
-  createDescriptorSetsForRenderer();
-  createDefaultDescriptorSetForMesh();
-
   // Create our command pool (So we can make command buffers
-  mCommandPool = mDeviceInstance->createCommandPool({ vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-    /* vk::CommandPoolCreateFlagBits::eTransient | // Buffers will be short-lived and returned to pool shortly after use
-       vk::CommandPoolCreateFlagBits::eResetCommandBuffer // Buffers can be reset individually, instead of needing to reset the entire pool
-       */
-    }, *mQueue);
+  // eResetCommandBuffer - Buffers can be reset/re-used individually, instead of needing to reset the whole pool
+  mCommandPool = mDeviceInstance->createCommandPool({ vk::CommandPoolCreateFlagBits::eResetCommandBuffer }, *mQueue);
   // Now make a command buffer for each swapchain image
   auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo()
     .setCommandPool(mCommandPool.get())
-    .setCommandBufferCount(static_cast<uint32_t>(mPerImageData.size()))
+    .setCommandBufferCount(static_cast<uint32_t>(mWindowIntegration->swapChainSize()))
     .setLevel(vk::CommandBufferLevel::ePrimary);
   mCommandBuffers = mDeviceInstance->device().allocateCommandBuffersUnique(commandBufferAllocateInfo);
+}
+
+void Renderer::reCreateSwapChainAndGraphicsPipeline() {
+  // Perform a partial teardown and recreate (to hand window resize/similar)
+  // This method should clean up anything that's created in createSwapChainAndGraphicsPipeline
+  // TODO: It's possible/more efficient to create a new swapchain while we're still rendering
+  // For now just halt everything and recreate from scratch
+  mDeviceInstance->waitAllDevicesIdle();
+
+//  mPerImageData.clear();
+
+  mCommandBuffers.clear();
+  // TODO: Don't actually need to recreate the pool
+  mCommandPool.reset();
+
+  mGraphicsPipeline.reset();
+  mFrameBuffer.reset();
+  mWindowIntegration.reset();
+
+  createSwapChainAndGraphicsPipeline();
 }
 
 void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer) {
@@ -174,7 +206,7 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
   commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
   // Bind the graphics pipeline
-   commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->pipeline());
+  commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mGraphicsPipeline->pipeline());
 
   // Update the per-frame UBO
   UBOSetPerFrame pfData;
@@ -268,19 +300,17 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
 }
 
 void Renderer::initDescriptorSetsForRenderer() {
-  // Register the Descriptor set layout on the pipeline
-  mGraphicsPipeline->addDescriptorSetLayoutBinding(0, 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics);
 
   // Create a descriptor pool, to allocate descriptor sets for per-frame data
   // Just need to be able to pass one UBO for now, but as we'll have multiple
   // frames in flight we'll have several copies of the buffer
   auto poolSize = vk::DescriptorPoolSize()
     .setType(vk::DescriptorType::eUniformBuffer)
-    .setDescriptorCount(mMaxFramesInFlight);
+    .setDescriptorCount(mPerImageData.size());
 
   auto poolInfo = vk::DescriptorPoolCreateInfo()
     .setFlags({})
-    .setMaxSets(mMaxFramesInFlight)
+    .setMaxSets(mPerImageData.size())
     .setPoolSizeCount(1)
     .setPPoolSizes(&poolSize);
   mDescriptorPoolRenderer = mDeviceInstance->device().createDescriptorPoolUnique(poolInfo);
@@ -292,7 +322,7 @@ void Renderer::createDescriptorSetsForRenderer() {
   // Data in the UBOs will change, after synchronising with the pipeline
 
   std::vector<vk::DescriptorSetLayout> dsLayouts;
-  for( auto i = 0u; i < mMaxFramesInFlight; ++i ) dsLayouts.emplace_back(mGraphicsPipeline->descriptorSetLayouts()[0].get());
+  for( auto i = 0u; i < mPerImageData.size(); ++i ) dsLayouts.emplace_back(mGraphicsPipeline->descriptorSetLayouts()[0].get());
   auto dsInfo = vk::DescriptorSetAllocateInfo()
     .setDescriptorPool(mDescriptorPoolRenderer.get())
     .setDescriptorSetCount(dsLayouts.size())
@@ -340,8 +370,6 @@ void Renderer::createDescriptorSetsForRenderer() {
 }
 
 void Renderer::initDescriptorSetsForMeshes() {
-  // Register the Descriptor set layout on the pipeline
-  mGraphicsPipeline->addDescriptorSetLayoutBinding(1, 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics);
 
   // Create a descriptor pool, to allocate descriptor sets for per-mesh data
   // Here we've set a resonable limit of 1000, meaning 1000 different material
@@ -564,8 +592,15 @@ void Renderer::frameStart() {
 }
 
 void Renderer::frameEnd() {
-  // Important that we catch any vulkan errors here - it's the most likely location
-  // vulkan.hpp throws exceptions by default, in release they might be disabled by CMake
+  // Handle any explicit resize events from the window system
+  if( mRecreateSwapChainSoon ) {
+    reCreateSwapChainAndGraphicsPipeline();
+    mRecreateSwapChainSoon = false;
+  }
+
+  // Important that we catch any vulkan errors here
+  // Renderer assumes the default of exceptions enabled for vulkan.hpp
+  // and probably won't even build with them disabled
   try
   {
     // TODO: This method is kinda complex/verbose, should simplify if possible
@@ -584,10 +619,10 @@ void Renderer::frameEnd() {
       std::numeric_limits<uint64_t>::max(), // Don't timeout, block until an image is available (TODO: Should skip the frame and let the engine continue updating?)
       mPerFrameData[mCurrentFrameData.frameIndex].imageAvailableSem.get(), // semaphore to signal once any existing presentation tasks are done with this image, and that it's available to be presented to
       vk::Fence()); // Dummy fence, we don't care here
-    if( img.result != vk::Result::eSuccess ) {
-        // TODO: This can return 'out of date', meaning we need to recreate the swapchain
-        // Currently we'll just terminate when this happens
-        throw std::runtime_error("TODO: acquireNextImageKHR failed - This isn't handled by the renderer yet");
+
+    if( img.result == vk::Result::eSuboptimalKHR ) {
+      // This isn't an error in that we can continue rendering, but we should recreate the swapchain soon
+      mRecreateSwapChainSoon = true;
     }
     mCurrentFrameData.imageIndex = img.value;
 
@@ -650,16 +685,15 @@ void Renderer::frameEnd() {
 
     // TODO: Currently using a single queue for both graphics and present
     // Some systems may not be able to support this
-    auto presentResult = mQueue->queue.presentKHR(presentInfo);
-    if( presentResult!= vk::Result::eSuccess ) {
-        // TODO: present can return failures for out of date/suboptimal, need to
-        // recreate the swap chain in that case
-        throw std::runtime_error("TODO: queue present failed - This isn't handled by the renderer yet");
-    }
+    mQueue->queue.presentKHR(presentInfo);
 
     // Advance to next frame index, loop at max
     mCurrentFrameData.frameIndex++;
     if (mCurrentFrameData.frameIndex == mMaxFramesInFlight) mCurrentFrameData.frameIndex = 0;
+  }
+  catch ( vk::OutOfDateKHRError& e ) {
+    // Either acquireNextImageKHR or presentKHR returned OutOfDate, meaning a window resize/similar
+    reCreateSwapChainAndGraphicsPipeline();
   }
   catch (vk::Error& e) {
     std::cerr << "Renderer::frameEnd: vk::Error: " << e.what() << std::endl;

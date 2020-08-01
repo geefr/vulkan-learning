@@ -74,9 +74,9 @@ int main(int argc, char* argv[])
         camRotMat = glm::rotate(camRotMat, camRot, glm::vec3(0.0, 1.0, 0.0));
         camPos = camRotMat * camPos;
         e.camera().lookAt(camPos, glm::vec3(0.0,0.0,0.0), glm::vec3(0.0,1.0,0.0));
+        
+        e.camera().projectionPerspective(glm::radians(50.f), e.windowWidth() / e.windowHeight(), 0.1f, 1000.0f);
     });
-
-    eng.camera().projectionPerspective(glm::radians(50.f), 800.f / 600.f, 0.1f, 1000.0f);
 
     // Start the engine!
     eng.run();

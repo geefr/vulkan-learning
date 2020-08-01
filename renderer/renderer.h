@@ -27,7 +27,7 @@
 #include <glm/glm.hpp>
 
 // https://github.com/KhronosGroup/Vulkan-Hpp
-# include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan.hpp>
 
 #include <iostream>
 #include <stdexcept>
@@ -35,6 +35,7 @@
 #include <list>
 #include <map>
 #include <string>
+#include <atomic>
 
 class FrameBuffer;
 class SimpleBuffer;
@@ -131,9 +132,18 @@ public:
   void waitIdle();
   void cleanup();
 
-  void onGLFWKeyEvent(int key, int scancode, int action, int mods);
+  int windowWidth() const;
+  int windowHeight() const;
 
 private:
+  void onGLFWKeyEvent(int key, int scancode, int action, int mods);
+  void onGLFWFramebufferSize(int width, int height);
+
+  // Create the swap chain, graphics pipeline, framebuffers, etc
+  // Before calling make sure mQueue == The graphics/presentation queue
+  void createSwapChainAndGraphicsPipeline();
+  void reCreateSwapChainAndGraphicsPipeline();
+
   // Build command buffer(s) for the current frame
   // Will read from mPerFrameData and mPerImageData
   void buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Framebuffer& frameBuffer);
@@ -152,6 +162,7 @@ private:
 
   // The window itself
   // TODO: Currently hardcoded, should not be
+  // TODO: This should be moved to WindowIntegration, the renderer shouldn't need to care
   GLFWwindow* mWindow = nullptr;
   int mWindowWidth = 800;
   int mWindowHeight = 600;
@@ -233,6 +244,10 @@ private:
   // Default/placeholder material
   std::unique_ptr<SimpleBuffer> mUBOMeshDataDefault;
   vk::DescriptorSet mDescriptorSetMeshDataDefault;
+
+  // Flag set by on GLFWFramebufferSize
+  // Checked during rendering to trigger swapchain recreation
+  std::atomic<bool> mRecreateSwapChainSoon = false;
 };
 
 #endif
