@@ -18,24 +18,26 @@ GraphicsPipeline::GraphicsPipeline(WindowIntegration& windowIntegration, DeviceI
   : Pipeline(deviceInstance)
   , mWindowIntegration(windowIntegration)
   , mInvertY(invertY)
-{}
+{
+  mSamples = windowIntegration.samples();
+}
 
 void GraphicsPipeline::createRenderPass() {
   // The render pass contains stuff like what the framebuffer attachments are and things
   auto colourAttachment = vk::AttachmentDescription()
-      .setFormat(mWindowIntegration.format())
-      .setSamples(mSampleCount)
+      .setFormat(mWindowIntegration.sampleFormat())
+      .setSamples(mSamples)
       .setLoadOp(vk::AttachmentLoadOp::eClear) // What to do before rendering
       .setStoreOp(vk::AttachmentStoreOp::eStore) // What to do after rendering
       .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
       .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
       .setInitialLayout(vk::ImageLayout::eUndefined) // Image layout before render pass begins, we don't care, gonna clear anyway
-      .setFinalLayout(vk::ImageLayout::ePresentSrcKHR) // Image layout to transfer to when render pass finishes, ready for presentation
+      .setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal) // Image layout to transfer to when render pass finishes, ready for presentation
       ;
 
   auto depthAttachment = vk::AttachmentDescription()
       .setFormat(mWindowIntegration.depthFormat())
-      .setSamples(mSampleCount)
+      .setSamples(mSamples)
       .setLoadOp(vk::AttachmentLoadOp::eClear)
       .setStoreOp(vk::AttachmentStoreOp::eDontCare)
       .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
@@ -43,23 +45,36 @@ void GraphicsPipeline::createRenderPass() {
       .setInitialLayout(vk::ImageLayout::eUndefined)
       .setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
+  auto colourAttachmentResolve = vk::AttachmentDescription()
+      .setFormat(mWindowIntegration.swapChainFormat())
+      .setSamples(vk::SampleCountFlagBits::e1)
+      .setLoadOp(vk::AttachmentLoadOp::eDontCare)
+      .setStoreOp(vk::AttachmentStoreOp::eStore)
+      .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+      .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
+      .setInitialLayout(vk::ImageLayout::eUndefined)
+      .setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+
   // For starters we only need one sub-pass to draw
   // Multiple sub passes are used for multi-pass rendering
   // putting them in one overall render pass means vulkan can reorder
   // them as needed
   auto colourAttachmentRef = vk::AttachmentReference()
       .setAttachment(0) // Index in attachment description array (We only have one so far)
-      .setLayout(vk::ImageLayout::eColorAttachmentOptimal) // Layout for the attachment during this subpass. This attachment is our colour buffer so marked as such here
-      ;
+      .setLayout(vk::ImageLayout::eColorAttachmentOptimal); // Layout for the attachment during this subpass. This attachment is our colour buffer so marked as such here
   auto depthAttachmentRef = vk::AttachmentReference()
       .setAttachment(1)
       .setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+  auto colourAttachmentResolveRef = vk::AttachmentReference()
+      .setAttachment(2)
+      .setLayout(vk::ImageLayout::eColorAttachmentOptimal);
 
   auto subpass = vk::SubpassDescription()
       .setPipelineBindPoint(vk::PipelineBindPoint::eGraphics) // Marked as a graphics subpass, looks like we can mix multiple subpass types in one render pass?
       .setColorAttachmentCount(1)
       .setPColorAttachments(&colourAttachmentRef)
       .setPDepthStencilAttachment(&depthAttachmentRef)
+      .setPResolveAttachments(&colourAttachmentResolveRef)
       ;
   // Index of colour attachment here matches layout = 0 in fragment shader
   // So the frag shader can reference multiple attachments as its output!
@@ -89,6 +104,7 @@ void GraphicsPipeline::createRenderPass() {
   std::vector<vk::AttachmentDescription> attachments;
   attachments.emplace_back(colourAttachment);
   attachments.emplace_back(depthAttachment);
+  attachments.emplace_back(colourAttachmentResolve);
   auto renderPassInfo = vk::RenderPassCreateInfo()
       .setAttachmentCount(attachments.size())
       .setPAttachments(attachments.size() ? attachments.data() : nullptr)
@@ -135,13 +151,13 @@ void GraphicsPipeline::createPipeline() {
 
   // Viewport
   // TODO: This should be set as dynamic state, passed through in the render pass
-  vk::Viewport viewport(0.f,0.f, mWindowIntegration.extent().width, mWindowIntegration.extent().height, 0.f, 1.f);
+  vk::Viewport viewport(0.f,0.f, mWindowIntegration.swapChainExtent().width, mWindowIntegration.swapChainExtent().height, 0.f, 1.f);
   if( mInvertY ) {
       // Flip the viewport
-      viewport.height = - static_cast<float>(mWindowIntegration.extent().height);
-      viewport.y = static_cast<float>(mWindowIntegration.extent().height);
+      viewport.height = - static_cast<float>(mWindowIntegration.swapChainExtent().height);
+      viewport.y = static_cast<float>(mWindowIntegration.swapChainExtent().height);
   }
-  vk::Rect2D scissor({0,0},mWindowIntegration.extent());
+  vk::Rect2D scissor({0,0},mWindowIntegration.swapChainExtent());
   auto viewportInfo = vk::PipelineViewportStateCreateInfo()
       .setFlags({})
       .setViewportCount(1)
@@ -167,8 +183,9 @@ void GraphicsPipeline::createPipeline() {
 
   // Multisampling
   auto multisampleInfo = vk::PipelineMultisampleStateCreateInfo()
-      .setSampleShadingEnable(false)
-      .setRasterizationSamples(mSampleCount);
+      .setSampleShadingEnable(false) // Improves sampling of textures at performance cost
+      .setMinSampleShading(0.2f)
+      .setRasterizationSamples(mSamples);
 
   // Depth/Stencil test
   auto depthStencil = vk::PipelineDepthStencilStateCreateInfo()

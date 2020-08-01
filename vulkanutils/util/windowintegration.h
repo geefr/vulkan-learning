@@ -26,25 +26,30 @@ class WindowIntegration
 {
 public:
   WindowIntegration() = delete;
-  WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue);
+  /// Setup the swapchain & resources
+  /// @param desiredSamples The maximum multi-sampling to use. If the device can't support this the highest level up to this will be selected
+  WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, vk::SampleCountFlagBits desiredSamples);
   WindowIntegration(const WindowIntegration&) = delete;
   WindowIntegration(WindowIntegration&&) = default;
   ~WindowIntegration();
 
 #ifdef USE_GLFW
-  WindowIntegration(GLFWwindow* window, DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue);
+  WindowIntegration(GLFWwindow* window, DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, vk::SampleCountFlagBits desiredSamples);
 #endif
 
-  // TODO: Giving direct access like this is dangerous, clean this up
-  const vk::Extent2D& extent() const { return mSwapChainExtent; }
-  const vk::Format& format() const { return mSwapChainFormat.format; }
-
-  const size_t swapChainSize() const { return mSwapChainImages.size(); }
+  vk::Extent2D swapChainExtent() const { return mSwapChainExtent; }
+  vk::Format swapChainFormat() const { return mSwapChainFormat.format; }
+  size_t swapChainSize() const { return mSwapChainImages.size(); }
   const vk::SwapchainKHR& swapChain() const { return mSwapChain.get(); }
   const std::vector<vk::Image>& swapChainImages() const { return mSwapChainImages; }
   const std::vector<vk::UniqueImageView>& swapChainImageViews() const { return mSwapChainImageViews; }
+
+  const vk::ImageView& sampleImageView() const { return mMultiSampleImage->view(); }
+  const vk::SampleCountFlagBits& samples() const { return mSamples; }
+  vk::Format sampleFormat() const { return mMultiSampleImage->format(); }
+
   const vk::ImageView& depthImageView() const { return mDepthImage->view(); }
-  const vk::Format& depthFormat() const { return mDepthFormat; }
+  vk::Format depthFormat() const { return mDepthImage->format(); }
 
 private:
 #ifdef USE_GLFW
@@ -55,6 +60,7 @@ private:
   void createSwapChain(DeviceInstance::QueueRef& queue);
   void createSwapChainImageViews();
   void createDepthResources();
+  void createMultiSampleResources();
 
   vk::SurfaceFormatKHR chooseSwapChainFormat(std::vector<vk::SurfaceFormatKHR> formats) const;
   vk::PresentModeKHR chooseSwapChainPresentMode(std::vector<vk::PresentModeKHR> presentModes) const;
@@ -63,12 +69,15 @@ private:
   DeviceInstance& mDeviceInstance;
 
   // These members 'owned' by the unique pointers below
+  // The swapchain - Images to render to, provided by the windowing system
   vk::SurfaceFormatKHR mSwapChainFormat;
   vk::Extent2D mSwapChainExtent;
   vk::PresentModeKHR mSwapPresentMode;
   std::vector<vk::Image> mSwapChainImages;
+  // The depth buffer
   std::unique_ptr<SimpleImage> mDepthImage;
-  vk::Format mDepthFormat;
+  // The render target for multisampling
+  std::unique_ptr<SimpleImage> mMultiSampleImage;
 
   // TODO: >.< For some reason trying to use a UniqueSurfaceKHR here
   // messes up, and we end up with the wrong value for mSurface.m_owner
@@ -83,6 +92,8 @@ private:
   // will be destructed in reverse order
   vk::UniqueSwapchainKHR mSwapChain;
   std::vector<vk::UniqueImageView> mSwapChainImageViews;
+
+  vk::SampleCountFlagBits mSamples = vk::SampleCountFlagBits::e1;
 };
 
 #endif // WINDOWINTEGRATION_H

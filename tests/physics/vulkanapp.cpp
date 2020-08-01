@@ -71,7 +71,7 @@ void VulkanApp::initVK() {
   // To do this we also need to specify how many queues from which families we want to create
   // In this case just 1 queue from the first family which supports graphics
 
-  mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mGraphicsQueue));
+  mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mGraphicsQueue, vk::SampleCountFlagBits::e1));
 
   mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get()));
   mComputePipeline.reset(new ComputePipeline(*mDeviceInstance.get()));
@@ -203,7 +203,7 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
       .setClearValueCount(1)
       .setPClearValues(&clearColour);
   renderPassInfo.renderArea.offset = vk::Offset2D(0,0);
-  renderPassInfo.renderArea.extent = mWindowIntegration->extent();
+  renderPassInfo.renderArea.extent = mWindowIntegration->swapChainExtent();
 
   // Barrier to prevent the start of vertex shader until writing has finished to particle buffer
   // Remember:

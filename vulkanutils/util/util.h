@@ -26,6 +26,8 @@ public:
   //static void ensureLayer(const std::vector<vk::LayerProperties>& layers, std::string layerName);
   static uint32_t findQueue(DeviceInstance& device, vk::QueueFlags requiredFlags);
 
+  static vk::SampleCountFlagBits maxUseableSamples(vk::PhysicalDevice& device, vk::SampleCountFlagBits desiredSamples);
+
 
   static vk::CommandPool& createCommandPool( vk::CommandPoolCreateFlags flags );
   static vk::UniqueBuffer createBuffer( vk::DeviceSize size, vk::BufferUsageFlags usageFlags );

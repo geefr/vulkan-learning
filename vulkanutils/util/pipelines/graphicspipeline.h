@@ -51,9 +51,7 @@ private:
   // Whether to flip y axis (follow opengl conventions) or not (follow vulkan conventions)
   bool mInvertY = false;
 
-  // TODO: To support multisampling we'll need to render into a multisampled buffer, then render that to the single-sampled framebuffer
-  // See https://vulkan-tutorial.com/Multisampling
-  vk::SampleCountFlagBits mSampleCount = vk::SampleCountFlagBits::e1;
+  vk::SampleCountFlagBits mSamples = vk::SampleCountFlagBits::e1;
 };
 
 #endif // GRAPHICSPIPELINE_H

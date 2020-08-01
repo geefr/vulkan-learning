@@ -96,7 +96,7 @@ void Renderer::createSwapChainAndGraphicsPipeline() {
   // Create a logical device to interact with
   // To do this we also need to specify how many queues from which families we want to create
   // In this case just 1 queue from the first family which supports graphics
-  mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mQueue));
+  mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mQueue, vk::SampleCountFlagBits::e64));
 
   // Create the pipeline, with a flag to invert the viewport height (Switch to left handed coordinate system)
   // If changing this check the compile flags for GLM_FORCE_LEFT_HANDED - The rest of the engine uses one cs
@@ -207,7 +207,7 @@ void Renderer::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::Fr
     .setClearValueCount(clearVals.size())
     .setPClearValues(clearVals.data());
   renderPassInfo.renderArea.offset = vk::Offset2D(0, 0);
-  renderPassInfo.renderArea.extent = mWindowIntegration->extent();
+  renderPassInfo.renderArea.extent = mWindowIntegration->swapChainExtent();
 
   // render commands will be embedded in primary buffer and no secondary command buffers
   // will be executed

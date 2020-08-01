@@ -21,13 +21,14 @@ SimpleImage::SimpleImage(DeviceInstance& deviceInstance,
     vk::MemoryPropertyFlags memFlags,
     vk::ImageAspectFlags aspectFlags)
   : mDeviceInstance(deviceInstance)
+  , mFormat(imageFormat)
 {
   if( mipLevels == 0 ) throw std::runtime_error("SimpleImage: mipLevels must be >= 1");
   if( arrayLayers == 0 ) throw std::runtime_error("SimpleImage: arrayLayers must be >= 1");
   // Create the image
   mImage = mDeviceInstance.createImage(
         imageType,
-        imageFormat,
+        mFormat,
         extent,
         mipLevels,
         arrayLayers,
@@ -48,7 +49,7 @@ SimpleImage::SimpleImage(DeviceInstance& deviceInstance,
   mImageView = mDeviceInstance.createImageView(
         mImage.get(),
         imageViewType,
-        imageFormat,
+        mFormat,
         aspectFlags
         );
   if( !mImageView ) throw std::runtime_error("SimpleImage: Failed to create image view");
@@ -80,3 +81,5 @@ void SimpleImage::flush() {
 }
 
 std::string& SimpleImage::name() { return mName; }
+
+vk::Format SimpleImage::format() const { return mFormat; }

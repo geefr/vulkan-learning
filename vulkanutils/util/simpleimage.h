@@ -45,6 +45,8 @@ public:
   vk::Image& image();
   vk::ImageView& view();
 
+  vk::Format format() const;
+
   /// The name of the image - Handy if you're trying to work out which one you forgot to delete ;)
   std::string& name();
 
@@ -56,6 +58,8 @@ private:
   vk::UniqueImageView mImageView;
 
   vk::UniqueDeviceMemory mDeviceMemory;
+
+  vk::Format mFormat;
 
   bool mMapped = false;
   std::string mName;

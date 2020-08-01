@@ -30,7 +30,7 @@ void VulkanApp::initVK() {
   // To do this we also need to specify how many queues from which families we want to create
   // In this case just 1 queue from the first family which supports graphics
 
-  mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mQueue));
+  mWindowIntegration.reset(new WindowIntegration(mWindow, *mDeviceInstance.get(), *mQueue, vk::SampleCountFlagBits::e8));
 
   mGraphicsPipeline.reset(new GraphicsPipeline(*mWindowIntegration.get(), *mDeviceInstance.get()));
 
@@ -121,7 +121,7 @@ void VulkanApp::buildCommandBuffer(vk::CommandBuffer& commandBuffer, const vk::F
       .setClearValueCount(1)
       .setPClearValues(&clearColour);
   renderPassInfo.renderArea.offset = vk::Offset2D(0,0);
-  renderPassInfo.renderArea.extent = mWindowIntegration->extent();
+  renderPassInfo.renderArea.extent = mWindowIntegration->swapChainExtent();
 
   // render commands will be embedded in primary buffer and no secondary command buffers
   // will be executed

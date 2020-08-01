@@ -6,26 +6,31 @@
  */
 
 #include "windowintegration.h"
+#include "util.h"
 
 #include <iostream>
 
-WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue)
-  : mDeviceInstance(deviceInstance) {
+WindowIntegration::WindowIntegration(DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, vk::SampleCountFlagBits desiredSamples)
+  : mDeviceInstance(deviceInstance)
+{
+  mSamples = Util::maxUseableSamples(deviceInstance.physicalDevice(), desiredSamples);
 }
 
 #ifdef USE_GLFW
-WindowIntegration::WindowIntegration(GLFWwindow* window, DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue)
-  : WindowIntegration(deviceInstance, queue) {
+WindowIntegration::WindowIntegration(GLFWwindow* window, DeviceInstance& deviceInstance, DeviceInstance::QueueRef& queue, vk::SampleCountFlagBits desiredSamples)
+  : WindowIntegration(deviceInstance, queue, desiredSamples) {
   mGLFWWindow = window;
   createSurfaceGLFW(window);
   createSwapChain(queue);
   createSwapChainImageViews();
   createDepthResources();
+  createMultiSampleResources();
 }
 #endif
 
 WindowIntegration::~WindowIntegration() {
   for(auto& p : mSwapChainImageViews) p.reset();
+  mMultiSampleImage.reset();
   mDepthImage.reset();
   mSwapChain.reset();
   vkDestroySurfaceKHR(mDeviceInstance.instance(), mSurface, nullptr);
@@ -88,23 +93,38 @@ void WindowIntegration::createSwapChain(DeviceInstance::QueueRef& queue) {
 }
 
 void WindowIntegration::createDepthResources() {
-  mDepthFormat = mDeviceInstance.getDepthBufferFormat();
+  auto depthFormat = mDeviceInstance.getDepthBufferFormat();
 
   // Create depth buffer resources
   // Depth image must be 2D, same size as colour buffers, sensible format, and device local
   mDepthImage.reset(new SimpleImage(
-                        mDeviceInstance,
-                        vk::ImageType::e2D,
-                        vk::ImageViewType::e2D,
-                        mDepthFormat,
-                        {mSwapChainExtent.width, mSwapChainExtent.height, 1},
-                        1,
-                        1,
-                        vk::SampleCountFlagBits::e1,
-                        vk::ImageUsageFlagBits::eDepthStencilAttachment,
-                        vk::MemoryPropertyFlagBits::eDeviceLocal,
-                        vk::ImageAspectFlagBits::eDepth
-    ));
+                      mDeviceInstance,
+                      vk::ImageType::e2D,
+                      vk::ImageViewType::e2D,
+                      depthFormat,
+                      {mSwapChainExtent.width, mSwapChainExtent.height, 1},
+                      1,
+                      1,
+                      mSamples,
+                      vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
+                      vk::MemoryPropertyFlagBits::eDeviceLocal,
+                      vk::ImageAspectFlagBits::eDepth
+                      ));
+}
+
+void WindowIntegration::createMultiSampleResources() {
+  mMultiSampleImage.reset(new SimpleImage(
+                            mDeviceInstance,
+                            vk::ImageType::e2D,
+                            vk::ImageViewType::e2D,
+                            mSwapChainFormat.format,
+                            {mSwapChainExtent.width, mSwapChainExtent.height, 1},
+                            1, 1,
+                            mSamples,
+                            vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
+                            vk::MemoryPropertyFlagBits::eDeviceLocal,
+                            vk::ImageAspectFlagBits::eColor
+                            ));
 }
 
 void WindowIntegration::createSwapChainImageViews() {

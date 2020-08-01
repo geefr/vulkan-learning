@@ -134,6 +134,16 @@ uint32_t Util::findQueue(DeviceInstance& device, vk::QueueFlags requiredFlags) {
   return static_cast<uint32_t>(it - qFamProps.begin());
 }
 
+vk::SampleCountFlagBits Util::maxUseableSamples(vk::PhysicalDevice& device, vk::SampleCountFlagBits desiredSamples) {
+  auto props = device.getProperties();
+  auto maxSupported = props.limits.framebufferColorSampleCounts & props.limits.framebufferDepthSampleCounts & props.limits.framebufferStencilSampleCounts;
+
+  do {
+    if( desiredSamples & maxSupported ) return desiredSamples;
+    desiredSamples = static_cast<vk::SampleCountFlagBits>(static_cast<uint32_t>(desiredSamples) >> 1);
+  } while(static_cast<uint32_t>(desiredSamples) != static_cast<uint32_t>(VK_SAMPLE_COUNT_1_BIT));
+  return vk::SampleCountFlagBits::e1;
+}
 
 #ifdef ENABLE_VK_DEBUG
 void Util::initDidl( vk::Instance& instance ) {
